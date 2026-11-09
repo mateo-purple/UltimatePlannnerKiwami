@@ -43,7 +43,7 @@ public class CloudSyncActivity extends Activity {
     private void busy(boolean yes){login.setEnabled(!yes);register.setEnabled(!yes);sync.setEnabled(!yes&&CloudSync.signedIn(this));logout.setEnabled(!yes&&CloudSync.signedIn(this));}
     private void authenticate(boolean create){
         String mail=email.getText().toString().trim(),pass=password.getText().toString();
-        if(mail.isEmpty()||pass.length<6){status.setText("メールアドレスと6文字以上のパスワードを入力してください");return;}
+        if(mail.isEmpty()||pass.length()<6){status.setText("メールアドレスと6文字以上のパスワードを入力してください");return;}
         busy(true);status.setText("接続しています…");
         CloudSync.signIn(this,project.getText().toString().trim(),key.getText().toString().trim(),mail,pass,create,(message,ok)->finished(message,ok));
     }
