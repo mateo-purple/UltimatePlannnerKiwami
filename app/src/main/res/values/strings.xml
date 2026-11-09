@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">アルティメットプランナー極み(仮)</string>
+    <string name="notification_channel">締切の通知</string>
+    <string name="notification_channel_description">課題や応募の締切をお知らせします</string>
+</resources>
