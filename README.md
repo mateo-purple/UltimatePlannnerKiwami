@@ -21,3 +21,12 @@ Android側は `UltimatePlannerKiwami_AndroidStudio_CloudSync_v4` としてGoogle
 5. ブラウザ版とAndroid版で同じProject ID、API Key、メールアドレス、パスワードを使ってログイン。
 
 Firebaseの設定が済むまではブラウザ内の予定はローカルに保存され、端末間同期は動きません。現在のログイン方式はメール/パスワードで、Googleアカウントログインではありません。同期競合は更新日時が新しいデータを優先します。Web版はログイン更新トークンをlocalStorageに保存するため共用端末では使用を避けてください。
+
+## GitHub同梱の拡張版（2026-11-09）
+
+- **`docs/`**: 週間時間割に加え、課題の優先表示・空き時間への自動配置・JSONバックアップ・Firebase同期を備えたWeb/PWA版。GitHub Pagesでは **main /docs** を公開元にすると、この版を利用できます。
+- **`app/`**: Android StudioのJavaプロジェクト一式。既存のSQLite保存データを保持するDB移行、Firebaseメール/パスワード認証、Cloud Firestore同期を追加しています。Android Studioではリポジトリのルートを開いてください。
+- **`docs/README.md`**: Firebase初期設定やPWAの使い方。Webアプリの設定ではFirebase Web App ID・Auth Domainも必要です。
+- **`.github/workflows/check.yml`**: WebテストとAndroidデバッグビルドのCI。
+
+既存のルート直下の `index.html` は初期Web版として残しています。機能を追加した版は `docs/` にあります。アカウント作成にはFirebase側でメール/パスワード認証とFirestoreの準備が必要です。
