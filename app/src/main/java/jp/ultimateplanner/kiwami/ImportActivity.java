@@ -3,6 +3,8 @@ package jp.ultimateplanner.kiwami;
 import android.app.Activity;
 import android.content.*;
 import android.graphics.Color;
+import android.provider.MediaStore;
+import java.io.File;
 import android.net.Uri;
 import android.os.*;
 import android.text.InputType;
@@ -16,7 +18,11 @@ import java.util.*;
 
 /** OCR / Android share sheet → immediate permanent registration, without review or confirmation. */
 public class ImportActivity extends Activity {
+    public static final String EXTRA_CAPTURE_ON_LAUNCH="capture_on_launch";
     private static final int SELECT_IMAGE=202;
+    private static final int TAKE_PHOTO=203;
+    private static final String CAPTURE_FILE="camera_capture.jpg";
+    private boolean cameraLaunching=false;
     private TextRecognizer recognizer;
     private ScheduleDatabase db;
     private EditText source;
@@ -41,6 +47,10 @@ public class ImportActivity extends Activity {
                 source.setText(text);
                 saveImmediately(text,"共有テキスト");
             }
+        } else if(b==null && incoming.getBooleanExtra(EXTRA_CAPTURE_ON_LAUNCH,false)) {
+            // A tap on the main screen's import action opens the camera immediately.
+            // Shared text/images must not be interrupted by a camera launch.
+            launchCamera();
         }
     }
 
@@ -69,18 +79,21 @@ public class ImportActivity extends Activity {
         Ui.padding(content,20,22,20,34);
         scroll.addView(content);
         screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        content.addView(Ui.text(this,"画像を選択するか、共有した文章を送ると、その場で予定に登録します。",14,Ui.MUTED));
+        content.addView(Ui.text(this,"カメラで撮影するか、保存した画像・共有した文章を読み取って予定に登録します。",14,Ui.MUTED));
 
         LinearLayout choice=Ui.horizontal(this);
-        TextView photo=Ui.button(this,"画像を選ぶ",true);
+        TextView camera=Ui.button(this,"カメラで撮影",true);
+        camera.setOnClickListener(v->launchCamera());
+        choice.addView(camera,new LinearLayout.LayoutParams(0,-2,1));
+        TextView photo=Ui.button(this,"保存画像を選ぶ",false);
         photo.setOnClickListener(v->chooseImage());
-        choice.addView(photo,new LinearLayout.LayoutParams(0,-2,1));
-        TextView clipboard=Ui.button(this,"コピーした文章",false);
+        LinearLayout.LayoutParams pp=Ui.margin(this,0,-2,10,0,0,0);
+        pp.width=0;pp.weight=1;
+        choice.addView(photo,pp);
+        content.addView(choice,Ui.margin(this,-1,-2,0,10,0,0));
+        TextView clipboard=Ui.button(this,"コピーした文章を取り込む",false);
         clipboard.setOnClickListener(v->paste());
-        LinearLayout.LayoutParams cp=Ui.margin(this,0,-2,10,0,0,0);
-        cp.width=0;cp.weight=1;
-        choice.addView(clipboard,cp);
-        content.addView(choice,Ui.margin(this,-1,-2,0,20,0,0));
+        content.addView(clipboard,Ui.margin(this,-1,-2,0,10,0,0));
 
         status=Ui.text(this,"未登録",13,Ui.MUTED);
         content.addView(status,Ui.margin(this,-1,-2,0,15,0,0));
@@ -98,6 +111,31 @@ public class ImportActivity extends Activity {
         Ui.attach(content,Ui.text(this,"読み取ったデータは自動保存されます。登録結果から編集や取り消しもできます。eシラバスはスクリーンショット、またはブラウザの共有機能で取り込んでください。",12,Ui.MUTED),22);
     }
 
+    private File captureFile(){return new File(getCacheDir(),CAPTURE_FILE);}
+
+    private Uri captureUri(){return Uri.parse("content://"+getPackageName()+".capture/image");}
+
+    private void launchCamera() {
+        if(cameraLaunching)return;
+        try {
+            File file=captureFile();
+            // An old canceled capture must not be mistaken for the new photograph.
+            if(file.exists()&&!file.delete())throw new java.io.IOException("古い撮影データを削除できません");
+            if(!file.createNewFile())throw new java.io.IOException("撮影画像を準備できません");
+            Uri uri=captureUri();
+            Intent intent=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT,uri);
+            intent.setClipData(ClipData.newRawUri("撮影画像",uri));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            cameraLaunching=true;
+            status.setText("カメラを起動します…");
+            startActivityForResult(intent,TAKE_PHOTO);
+        } catch(Exception e) {
+            cameraLaunching=false;
+            status.setText("カメラを起動できませんでした: "+e.getMessage());
+        }
+    }
+
     private void chooseImage() {
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -108,6 +146,15 @@ public class ImportActivity extends Activity {
     @Override protected void onActivityResult(int req,int code,Intent data) {
         super.onActivityResult(req,code,data);
         if(req==SELECT_IMAGE&&code==RESULT_OK&&data!=null&&data.getData()!=null)readImage(data.getData());
+        if(req==TAKE_PHOTO){
+            cameraLaunching=false;
+            if(code==RESULT_OK&&captureFile().exists()&&captureFile().length()>0){
+                readImage(captureUri(),"カメラ撮影",true);
+            } else {
+                captureFile().delete();
+                status.setText(code==RESULT_OK?"撮影画像を取得できませんでした。もう一度撮影してください。":"撮影をキャンセルしました");
+            }
+        }
     }
 
     private void paste() {
@@ -121,16 +168,23 @@ public class ImportActivity extends Activity {
         saveImmediately(text,"クリップボード");
     }
 
-    private void readImage(Uri uri) {
+    private void readImage(Uri uri){readImage(uri,"画像OCR",false);}
+
+    private void readImage(Uri uri,String origin,boolean removeAfterRead) {
         status.setText("画像を読み取っています…");
         try {
             InputImage img=InputImage.fromFilePath(this,uri);
             recognizer.process(img).addOnSuccessListener(result->{
+                if(removeAfterRead)captureFile().delete();
                 String text=result.getText();
                 source.setText(text);
-                saveImmediately(text,"画像OCR");
-            }).addOnFailureListener(e->status.setText("画像の読み取りに失敗しました: "+e.getMessage()));
+                saveImmediately(text,origin);
+            }).addOnFailureListener(e->{
+                if(removeAfterRead)captureFile().delete();
+                status.setText("画像の読み取りに失敗しました: "+e.getMessage());
+            });
         } catch(Exception e) {
+            if(removeAfterRead)captureFile().delete();
             status.setText("画像を開けませんでした: "+e.getMessage());
         }
     }

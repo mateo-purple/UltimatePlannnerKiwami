@@ -8,17 +8,18 @@ Android / iPhone / Windows / Mac で使える、週間予定表型のWebアプ�
 
 開発時は `python -m http.server 8765 --directory docs` で起動し、ブラウザで `http://localhost:8765` を開きます。HTMLファイルをダブルクリックした `file://` 起動はES Modulesが制限される場合があります。
 
-## Firebaseの設定
+## Firebaseの設定（管理者向け）
 
-1. [Firebase Console](https://console.firebase.google.com/) でプロジェクトを作成。
-2. **Authentication → Sign-in method → メール/パスワード** を有効にする。
-3. **Firestore Database** を作成し、リポジトリ直下の `firestore.rules` の内容を **ルール** に貼り付けて公開する（公開ルールにはしない）。
-4. **プロジェクトの設定 → マイアプリ** でWebアプリを追加し、`firebaseConfig` の `apiKey`、`projectId`、`appId`、`authDomain` を控える。
-5. Web版の **設定 → クラウド同期** に4項目を入力。再読み込み後に **アカウント → 新規登録 / ログイン** を使う。
-6. Android版の **設定 → 端末間の同期** に同じ `projectId` と `apiKey` を入力し、同じメール・パスワードでログインする。
-7. GitHub Pagesのドメインを使う場合は、Authenticationの **Settings → Authorized domains** に `mateo-purple.github.io` を追加する（Firebase設定により必要な場合）。
+Firebaseプロジェクト `ultimateplannerkiwami` は接続済みです。`docs/firebase-config.js` は公開用のFirebaseクライアント設定であり、秘密鍵ではありません。**サービスアカウントのJSONや管理者秘密鍵をここへ追加しないでください。**
 
-Firebaseプロジェクト未設定でも、予定はブラウザ内のローカルストレージに保存されます。別のブラウザや端末へ自動共有されるのはFirebase設定・ログイン後です。
+- Firebase Authenticationのメール/パスワード認証とCloud Firestoreを有効にしてください。
+- リポジトリの `firestore.rules` と同等のユーザー本人のみ許可するルールをFirestoreへ公開してください。
+- Web版は起動時にFirebaseへ自動接続します。利用者がProject IDやAPIキーを入力する必要はありません。
+- Web版右上の「アカウント」から登録・ログインし、Android版でも同じアカウントでログインしてください。
+- Cloudflare Workersの静的アセット公開先: `https://ultimateplannerkiwami.iloveshiroganenoel.workers.dev/`。新しいWeb版を反映するには `docs/` のファイルを再アップロードする必要があります。GitHubの更新だけでは自動公開されません。
+- 既存ブラウザのログイン・予定データは、同じURLで再公開すれば維持されます。ブラウザデータの削除は避けてください。
+
+Firebase Web APIキーは公開可能なクライアント識別子ですが、**Firestore Security RulesとAuthenticationが必須**です。公開したサイトに管理者認証情報を含めないでください。
 
 ## 画面・機能
 

@@ -11,7 +11,7 @@ jobs:
         with:
           node-version: '22'
       - run: node --test docs/tests/core.test.mjs
-      - run: node --check docs/app.js && node --check docs/core.js && node --check docs/sync.js
+      - run: node --check docs/app.js && node --check docs/core.js && node --check docs/sync.js && node --check docs/firebase-config.js
   android:
     runs-on: ubuntu-latest
     steps:
@@ -24,8 +24,6 @@ jobs:
         with:
           packages: 'platform-tools'
       - run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
-      # Gradle 8.9 is installed from the official distribution by setup-gradle.
-      # The repository's custom wrapper JAR cannot pass GitHub's official wrapper validation.
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'

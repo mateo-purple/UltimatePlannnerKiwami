@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Firebase Authentication + Firestore REST bridge; no google-services.json or Firebase SDK required. */
 public final class CloudSync {
+    public interface ChangeCallback { void changed(int count); }
     public interface Callback { void finished(String message, boolean success); }
     private static final String PREF="ultimateplanner-cloud-v1";
     private static final ExecutorService WORKER=Executors.newSingleThreadExecutor();
@@ -32,18 +33,20 @@ public final class CloudSync {
     private static final Handler UI=new Handler(Looper.getMainLooper());
     private CloudSync(){}
     private static SharedPreferences prefs(Context c){return c.getApplicationContext().getSharedPreferences(PREF,Context.MODE_PRIVATE);}
-    public static String project(Context c){return prefs(c).getString("project","");}
-    public static String apiKey(Context c){return prefs(c).getString("api_key","");}
+    public static String project(Context c){return FirebaseConfig.PROJECT_ID;}
+    public static String apiKey(Context c){return FirebaseConfig.WEB_API_KEY;}
     public static String email(Context c){return prefs(c).getString("email","");}
     public static boolean signedIn(Context c){return !prefs(c).getString("refresh","").isEmpty() && !prefs(c).getString("uid","").isEmpty();}
-    public static String accountLabel(Context c){return signedIn(c)?"同期アカウント: "+email(c):"未接続。設定するとAndroid・PC・iPhoneの予定を同期できます。";}
+    public static String accountLabel(Context c){return signedIn(c)?"同期アカウント: "+email(c):"未ログイン。アカウントにログインするとPC・iPhoneと同期できます。";}
     private static void done(Callback callback,String message,boolean ok){if(callback!=null)UI.post(()->callback.finished(message,ok));}
     public static void logout(Context context){prefs(context).edit().remove("refresh").remove("uid").remove("email").apply();}
     private static void validate(String project,String key) throws Exception{
         if(!project.matches("[a-z0-9][a-z0-9-]{3,100}"))throw new Exception("Firebase Project IDを確認してください");
         if(!key.matches("[A-Za-z0-9_-]{10,200}"))throw new Exception("Firebase Web API Keyを確認してください");
     }
-    public static void signIn(Context context,String project,String key,String email,String password,boolean register,Callback callback){
+    public static void signIn(Context context,String email,String password,boolean register,Callback callback){
+        final String project=FirebaseConfig.PROJECT_ID;
+        final String key=FirebaseConfig.WEB_API_KEY;
         Context app=context.getApplicationContext();
         if(!BUSY.compareAndSet(false,true)){done(callback,"別の同期処理が実行中です",false);return;}
         WORKER.execute(()->{
@@ -77,8 +80,20 @@ public final class CloudSync {
             finally{BUSY.set(false);}
         });
     }
+    /** Sync once on return to foreground, refreshing UI only if persisted records changed. */
+    public static void syncIfChanged(Context context, ChangeCallback callback){
+        Context app=context.getApplicationContext();
+        if(!signedIn(app)||!BUSY.compareAndSet(false,true))return;
+        WORKER.execute(()->{
+            try{
+                int changed=syncInternal(app);
+                if(changed>0 && callback!=null)UI.post(()->callback.changed(changed));
+            }catch(Exception ignored){ /* Offline: local SQLite remains available. */ }
+            finally{BUSY.set(false);}
+        });
+    }
     private static int syncInternal(Context c) throws Exception {
-        SharedPreferences p=prefs(c);String project=p.getString("project","");String key=p.getString("api_key","");
+        SharedPreferences p=prefs(c);String project=FirebaseConfig.PROJECT_ID;String key=FirebaseConfig.WEB_API_KEY;
         String uid=p.getString("uid","");String refresh=p.getString("refresh","");validate(project,key);
         if(uid.isEmpty()||refresh.isEmpty())throw new Exception("ログイン情報がありません");
         String form="grant_type=refresh_token&refresh_token="+enc(refresh);

@@ -8,31 +8,38 @@ public final class AutoPlanner {
     private AutoPlanner(){}
     private static int hourOf(long time){Calendar c=Calendar.getInstance();c.setTimeInMillis(time);return c.get(Calendar.HOUR_OF_DAY);}
     private static int minuteOf(long time){Calendar c=Calendar.getInstance();c.setTimeInMillis(time);return c.get(Calendar.MINUTE);}
+    /** Expand fixed events only; the weekly calendar must not run the task planner twice. */
+    public static List<Block> fixedBlocks(List<Entry> entries,long fromDay,int horizonDays){
+        List<Block> fixed=new ArrayList<>();
+        long startDay=TimeUtil.day(fromDay),endDay=TimeUtil.plusDay(startDay,horizonDays);
+        for(Entry e:entries){
+            if(e.deleted || !e.fixed || e.startMs<=0 || e.endMs<=e.startMs)continue;
+            if(!e.weekly){
+                if(e.endMs>startDay && e.startMs<endDay)fixed.add(new Block(e,e.startMs,e.endMs,false));
+                continue;
+            }
+            long duration=e.endMs-e.startMs;
+            Calendar cursor=Calendar.getInstance();
+            cursor.setTimeInMillis(TimeUtil.day(e.startMs));
+            // Skip old weeks in constant time instead of traversing years of history.
+            long before=startDay-duration-cursor.getTimeInMillis();
+            if(before>0){
+                int weeks=(int)Math.max(0,Math.min(52000,before/(7L*86400000L)-1));
+                cursor.add(Calendar.WEEK_OF_YEAR,weeks);
+            }
+            int startHour=hourOf(e.startMs),startMinute=minuteOf(e.startMs);
+            while(cursor.getTimeInMillis()<endDay){
+                long occurrence=TimeUtil.at(cursor.getTimeInMillis(),startHour,startMinute);
+                if(occurrence+duration>startDay && occurrence<endDay)
+                    fixed.add(new Block(e,occurrence,occurrence+duration,false));
+                cursor.add(Calendar.WEEK_OF_YEAR,1);
+            }
+        }
+        return fixed;
+    }
     public static Plan build(List<Entry> entries,Prefs p,long now,int horizonDays){
         Plan result=new Plan();long startDay=TimeUtil.day(now),endDay=TimeUtil.plusDay(startDay,horizonDays);
-        for(Entry e:entries){
-            if(!e.fixed || e.startMs<=0 || e.endMs<=e.startMs)continue;
-            if(e.weekly){
-                // Jump directly to the week overlapping the visible planning window.
-                // Do not iterate through every week since the original registration.
-                long originalDay=TimeUtil.day(e.startMs);
-                Calendar cursor=Calendar.getInstance();cursor.setTimeInMillis(originalDay);
-                Calendar window=Calendar.getInstance();window.setTimeInMillis(startDay);
-                long span=e.endMs-e.startMs;
-                while(cursor.getTimeInMillis()+span<startDay && cursor.getTimeInMillis()<endDay){
-                    long delta=startDay-cursor.getTimeInMillis()-span;
-                    int weeks=(int)Math.max(1,Math.min(52000,delta/(7L*86400000L)));
-                    cursor.add(Calendar.WEEK_OF_YEAR,weeks);
-                }
-                while(cursor.getTimeInMillis()<endDay){
-                    long a=TimeUtil.at(cursor.getTimeInMillis(),
-                        hourOf(e.startMs),minuteOf(e.startMs));
-                    long b=TimeUtil.plusDay(a,0)+span;
-                    if(b>startDay && a<endDay)result.blocks.add(new Block(e,a,b,false));
-                    cursor.add(Calendar.WEEK_OF_YEAR,1);
-                }
-            }else if(e.endMs>startDay && e.startMs<endDay)result.blocks.add(new Block(e,e.startMs,e.endMs,false));
-        }
+        result.blocks.addAll(fixedBlocks(entries,startDay,horizonDays));
         List<Entry> tasks=Priority.tasks(entries,now);
         for(Entry e:tasks){
             int remaining=e.remainingMin();if(remaining<=0)continue;

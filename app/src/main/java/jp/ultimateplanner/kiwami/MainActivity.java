@@ -17,38 +17,63 @@ public class MainActivity extends Activity {
     private final String[] names={"ホーム","予定表","タスク","設定"};
     private final String[] symbols={"⌂","▦","☑","⚙"};
     private LinearLayout root,body,bar;
-    private int page=0;
+    private int page=1; // Start directly on the usable weekly timetable.
     private long selectedDay=TimeUtil.day(System.currentTimeMillis());
     private ScheduleDatabase database;
     private Prefs prefs;
     private List<Entry> entries=new ArrayList<>();
     private AutoPlanner.Plan plan;
-    private final android.os.Handler cloudHandler=new android.os.Handler(android.os.Looper.getMainLooper());
-    private final Runnable periodicCloud=new Runnable(){@Override public void run(){CloudSync.sync(MainActivity.this,false,(message,ok)->{if(ok&&database!=null){refresh();render();}});cloudHandler.postDelayed(this,120000L);}};
+    private boolean firstResume=true;
+    private int calendarScrollY=-1; // Preserved when changing weeks.
 
     @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(Ui.BG);getWindow().setNavigationBarColor(Color.WHITE);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         database=new ScheduleDatabase(this);prefs=new Prefs(this);refresh();
-        if(b!=null){page=b.getInt("tab",0);selectedDay=b.getLong("date",selectedDay);}render();requestNotificationPermission();consumeShare(getIntent());}
+        if(b!=null){page=b.getInt("tab",1);selectedDay=b.getLong("date",selectedDay);}render();requestNotificationPermission();consumeShare(getIntent());}
     @Override public void onNewIntent(Intent i){super.onNewIntent(i);setIntent(i);consumeShare(i);}
     @Override public void onSaveInstanceState(Bundle b){b.putInt("tab",page);b.putLong("date",selectedDay);super.onSaveInstanceState(b);}
-    @Override protected void onResume(){super.onResume();if(database!=null){refresh();render();CloudSync.sync(this,false,(message,ok)->{if(ok&&database!=null){refresh();render();}});cloudHandler.removeCallbacks(periodicCloud);cloudHandler.postDelayed(periodicCloud,120000L);}}
-    @Override protected void onPause(){cloudHandler.removeCallbacks(periodicCloud);super.onPause();}
+    @Override protected void onResume(){
+        super.onResume();
+        if(firstResume){firstResume=false;}
+        else if(database!=null){refresh();render();}
+        // No periodic polling, and a no-op cloud sync never rebuilds the UI.
+        CloudSync.syncIfChanged(this,changed->{if(changed>0 && database!=null && !isFinishing()){
+            refresh();render();
+        }});
+    }
     @Override public void onDestroy(){if(database!=null)database.close();super.onDestroy();}
     private void consumeShare(Intent incoming){if(incoming==null||!Intent.ACTION_SEND.equals(incoming.getAction()))return;
         Intent next=new Intent(incoming);next.setClass(this,ImportActivity.class);next.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(next);setIntent(new Intent(this,MainActivity.class));}
-    private void refresh(){entries=database.all();plan=AutoPlanner.build(entries,prefs,System.currentTimeMillis(),21);}
-    private void navigate(int next){page=next;render();}
+    private void refresh(){
+        entries=database.all();
+        // The expensive free-slot planner is unnecessary on Settings and Tasks.
+        plan=(page==0||page==1)?AutoPlanner.build(entries,prefs,System.currentTimeMillis(),7):new AutoPlanner.Plan();
+    }
+    private void navigate(int next){page=next;refresh();render();}
     private void addNew(){startActivity(new Intent(this,EditEventActivity.class));}
-    private void importNew(){startActivity(new Intent(this,ImportActivity.class));}
+    private void importNew(){startActivity(new Intent(this,ImportActivity.class).putExtra(ImportActivity.EXTRA_CAPTURE_ON_LAUNCH,true));}
     private void edit(Entry e){startActivity(new Intent(this,EditEventActivity.class).putExtra("id",e.id));}
 
     private void render(){if(root==null){root=Ui.vertical(this);root.setBackgroundColor(Ui.BG);setContentView(root);}root.removeAllViews();
         LinearLayout toolbar=Ui.horizontal(this);Ui.padding(toolbar,20,15,15,13);toolbar.setBackgroundColor(Color.WHITE);
         TextView title=Ui.text(this,"アルティメットプランナー極み(仮)",16,Ui.INK,true);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);toolbar.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        TextView importBtn=topAction("⇧");importBtn.setContentDescription("予定を取り込む");importBtn.setOnClickListener(v->importNew());toolbar.addView(importBtn,Ui.margin(this,42,42,0,0,7,0));
+        TextView importBtn=topAction("📷");importBtn.setContentDescription("カメラで予定を取り込む");importBtn.setOnClickListener(v->importNew());toolbar.addView(importBtn,Ui.margin(this,42,42,0,0,7,0));
         TextView plus=topAction("＋");plus.setContentDescription("予定を追加する");plus.setTextColor(Color.WHITE);Ui.bg(plus,Ui.PURPLE,14);plus.setOnClickListener(v->addNew());toolbar.addView(plus,Ui.lp(this,42,42));root.addView(toolbar,Ui.lp(this,-1,-2));
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);body=Ui.vertical(this);Ui.padding(body,20,22,20,30);scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if(page==0)home();else if(page==1)calendar();else if(page==2)tasks();else settings();
+        if(page==1){
+            // Dedicated time-grid viewport: avoid a vertical ScrollView nested inside another.
+            body=Ui.vertical(this);
+            Ui.padding(body,14,14,14,0);
+            root.addView(body,new LinearLayout.LayoutParams(-1,0,1));
+            calendar();
+        }else{
+            ScrollView scroll=new ScrollView(this);
+            scroll.setFillViewport(true);
+            scroll.setVerticalScrollBarEnabled(false);
+            body=Ui.vertical(this);
+            Ui.padding(body,20,22,20,30);
+            scroll.addView(body);
+            root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+            if(page==0)home();else if(page==2)tasks();else settings();
+        }
         bottom();}
     private TextView topAction(String s){TextView v=Ui.text(this,s,24,Ui.INK,true);v.setGravity(Gravity.CENTER);Ui.bg(v,Ui.BG,14);return v;}
     private void bottom(){bar=Ui.horizontal(this);bar.setBackground(Ui.shape(this,Ui.WHITE,0));bar.setElevation(Ui.dp(this,10));Ui.padding(bar,4,8,4,8);
@@ -67,7 +92,7 @@ public class MainActivity extends Activity {
         metric(summary,Integer.toString(fixed),"予定",Ui.PURPLE);metric(summary,Integer.toString(task),"未完了",Ui.GREEN);metric(summary,Integer.toString(due),"期限間近",Ui.RED);
         body.addView(summary,Ui.margin(this,-1,-2,0,18,0,0));
         LinearLayout actions=Ui.horizontal(this);TextView schedule=Ui.button(this,"週間予定を見る",true);schedule.setOnClickListener(v->navigate(1));actions.addView(schedule,new LinearLayout.LayoutParams(0,-2,1));
-        TextView intake=Ui.button(this,"画像・共有から登録",false);intake.setTextSize(12);intake.setOnClickListener(v->importNew());actions.addView(intake,Ui.margin(this,0,-2,8,0,0,0));
+        TextView intake=Ui.button(this,"カメラで登録",false);intake.setTextSize(12);intake.setOnClickListener(v->importNew());actions.addView(intake,Ui.margin(this,0,-2,8,0,0,0));
         ((LinearLayout.LayoutParams)intake.getLayoutParams()).width=0;((LinearLayout.LayoutParams)intake.getLayoutParams()).weight=1;
         body.addView(actions,Ui.lp(this,-1,-2));
         Ui.attach(body,Ui.section(this,"今日の予定"),26);
@@ -86,33 +111,60 @@ public class MainActivity extends Activity {
     private void metric(LinearLayout container,String count,String label,int color){LinearLayout card=Ui.card(this);TextView n=Ui.text(this,count,25,color,true);card.addView(n);Ui.attach(card,Ui.text(this,label,12,Ui.MUTED),3);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(Ui.dp(this,3),0,Ui.dp(this,3),0);container.addView(card,p);}
 
     private void calendar(){
-        heading("予定表",TimeUtil.month(selectedDay));
-        LinearLayout controller=Ui.horizontal(this);TextView prev=Ui.button(this,"‹",false);prev.setTextSize(20);prev.setOnClickListener(v->{selectedDay=TimeUtil.plusDay(selectedDay,-7);render();});controller.addView(prev,Ui.lp(this,51,48));
-        TextView month=Ui.text(this,TimeUtil.month(selectedDay),16,Ui.INK,true);month.setGravity(Gravity.CENTER);controller.addView(month,new LinearLayout.LayoutParams(0,-2,1));
-        TextView now=Ui.button(this,"今日",false);now.setOnClickListener(v->{selectedDay=TimeUtil.day(System.currentTimeMillis());render();});controller.addView(now,Ui.margin(this,-2,-2,0,0,8,0));
-        TextView next=Ui.button(this,"›",false);next.setTextSize(20);next.setOnClickListener(v->{selectedDay=TimeUtil.plusDay(selectedDay,7);render();});controller.addView(next,Ui.lp(this,51,48));
-        body.addView(controller,Ui.margin(this,-1,-2,0,18,0,0));
         long monday=TimeUtil.weekStart(selectedDay);
-        List<AutoPlanner.Block> visible=new ArrayList<>();
-        // Build recurring fixed events for the requested week, including weeks outside the planning horizon.
-        AutoPlanner.Plan fixedWeek=AutoPlanner.build(entries,prefs,monday,7);
-        for(AutoPlanner.Block block:fixedWeek.blocks){
-            if(!block.generated)visible.add(block);
-        }
-        // Auto-assigned task sessions always use the current live plan.
+        long sunday=TimeUtil.plusDay(monday,6);
+        heading("週間予定表",TimeUtil.fmt(monday,"M月d日")+" 〜 "+TimeUtil.fmt(sunday,"M月d日"));
+        LinearLayout controller=Ui.horizontal(this);
+        TextView prev=Ui.button(this,"‹ 前週",false);
+        prev.setOnClickListener(v->{selectedDay=TimeUtil.plusDay(selectedDay,-7);render();});
+        controller.addView(prev,Ui.lp(this,77,46));
+        TextView week=Ui.text(this,TimeUtil.fmt(monday,"M/d")+"〜"+TimeUtil.fmt(sunday,"M/d"),14,Ui.INK,true);
+        week.setGravity(Gravity.CENTER);
+        controller.addView(week,new LinearLayout.LayoutParams(0,-2,1));
+        TextView now=Ui.button(this,"今日",false);
+        now.setOnClickListener(v->{selectedDay=TimeUtil.day(System.currentTimeMillis());render();});
+        controller.addView(now,Ui.margin(this,-2,-2,0,0,6,0));
+        TextView next=Ui.button(this,"翌週 ›",false);
+        next.setOnClickListener(v->{selectedDay=TimeUtil.plusDay(selectedDay,7);render();});
+        controller.addView(next,Ui.lp(this,77,46));
+        body.addView(controller,Ui.margin(this,-1,-2,0,8,0,12));
+
+        // Only expand fixed events here. Running the complete automatic planner a
+        // second time for each week switch caused excessive work on the UI thread.
+        List<AutoPlanner.Block> visible=AutoPlanner.fixedBlocks(entries,monday,7);
+        long end=TimeUtil.plusDay(monday,7);
         for(AutoPlanner.Block block:plan.blocks){
-            if(block.generated && block.start>=monday && block.start<TimeUtil.plusDay(monday,7))visible.add(block);
+            if(block.generated && block.start<end && block.end>monday)visible.add(block);
+        }
+        if(visible.isEmpty()){
+            TextView hint=Ui.text(this,"予定なし  ·  右上の＋から登録できます",12,Ui.MUTED);
+            body.addView(hint,Ui.margin(this,-1,-2,0,0,0,8));
         }
         HorizontalScrollView horizontal=new HorizontalScrollView(this);
-        horizontal.setHorizontalScrollBarEnabled(false);
-        WeeklyGridView grid=new WeeklyGridView(this,monday,selectedDay,visible,block->edit(block.entry),day->{selectedDay=day;render();});
-        horizontal.addView(grid);
-        body.addView(horizontal,Ui.margin(this,-1,-2,0,12,0,0));
-        horizontal.post(()->horizontal.scrollTo(Math.max(0,Ui.dp(this,grid.columnWidthDp()*(int)((selectedDay-monday)/86400000L)-115)),0));
-        Ui.attach(body,Ui.text(this,"横にスクロールして曜日を移動 · 予定をタップして編集",12,Ui.MUTED),5);
-        LinearLayout legend=Ui.card(this);Ui.attach(legend,Ui.text(this,"紫：自動配置した作業時間",13,Ui.PURPLE,true),0);
-        Ui.attach(legend,Ui.text(this,"固定された予定（授業・バイト・面接など）を避けて、締切の近いタスクから空き時間へ割り振ります。進捗や設定を変えると自動で再計算されます。",13,Ui.MUTED),8);
-        body.addView(legend,Ui.margin(this,-1,-2,0,20,0,0));
+        horizontal.setHorizontalScrollBarEnabled(true);
+        LinearLayout weekContent=Ui.vertical(this);
+        WeeklyHeaderView header=new WeeklyHeaderView(this,monday,selectedDay,day->{selectedDay=day;render();});
+        weekContent.addView(header,Ui.lp(this,-2,WeeklyGridView.HEADER_DP));
+        ScrollView timeScroll=new ScrollView(this);
+        timeScroll.setFillViewport(false);
+        timeScroll.setVerticalScrollBarEnabled(true);
+        timeScroll.setBackgroundColor(Color.WHITE);
+        WeeklyGridView grid=new WeeklyGridView(this,monday,selectedDay,visible,
+            block->edit(block.entry),day->{selectedDay=day;render();});
+        timeScroll.addView(grid,new android.widget.FrameLayout.LayoutParams(-2,-2));
+        timeScroll.setOnScrollChangeListener((v,x,y,oldX,oldY)->calendarScrollY=y);
+        weekContent.addView(timeScroll,new LinearLayout.LayoutParams(-1,0,1));
+        horizontal.addView(weekContent,new android.widget.FrameLayout.LayoutParams(-2,-1));
+        body.addView(horizontal,new LinearLayout.LayoutParams(-1,0,1));
+        final int desired=calendarScrollY>=0?calendarScrollY:Ui.dp(this,7*WeeklyGridView.HOUR_DP);
+        timeScroll.post(()->timeScroll.scrollTo(0,desired));
+        horizontal.post(()->{
+            int selected=(int)((selectedDay-monday)/(86400000L));
+            if(selected>=3)horizontal.scrollTo(Math.max(0,Ui.dp(this,(selected-2)*grid.columnWidthDp())),0);
+        });
+        TextView guidance=Ui.text(this,"縦：時刻  ／  横：曜日  ／  色付きの予定をタップして編集",11,Ui.MUTED);
+        guidance.setGravity(Gravity.CENTER);
+        body.addView(guidance,Ui.margin(this,-1,-2,0,7,0,8));
     }
     private List<AutoPlanner.Block> blocksForDay(long day){List<AutoPlanner.Block> l=new ArrayList<>();long end=TimeUtil.plusDay(day,1);
         for(AutoPlanner.Block b:plan.blocks)if(b.start<end&&b.end>day)l.add(b);l.sort(Comparator.comparingLong(a->a.start));return l;}
@@ -168,7 +220,7 @@ public class MainActivity extends Activity {
         body.addView(notice,Ui.margin(this,-1,-2,0,12,0,0));
         LinearLayout about=Ui.card(this);about.addView(Ui.text(this,"取り込みについて",16,Ui.INK,true));
         Ui.attach(about,Ui.text(this,"画像内の日本語を端末上で読み取ります。eシラバスなどの共有テキスト・画像にも対応します。読み取り完了後、予定として自動登録します。誤認識は登録結果から編集・取り消しできます。ログインが必要なページの自動取得には対応していません。",13,Ui.MUTED),10);
-        TextView importBtn=Ui.button(this,"取り込みを開く",false);importBtn.setOnClickListener(v->importNew());about.addView(importBtn,Ui.margin(this,-1,-2,0,15,0,0));body.addView(about,Ui.margin(this,-1,-2,0,12,0,0));
+        TextView importBtn=Ui.button(this,"カメラで取り込む",false);importBtn.setOnClickListener(v->importNew());about.addView(importBtn,Ui.margin(this,-1,-2,0,15,0,0));body.addView(about,Ui.margin(this,-1,-2,0,12,0,0));
         LinearLayout danger=Ui.card(this);danger.addView(Ui.text(this,"データ管理",16,Ui.INK,true));
         TextView erase=Ui.text(this,"すべての予定とタスクを削除",14,Ui.RED,true);erase.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("すべて削除しますか？").setMessage("復元できません。登録した予定・タスクを消去します。").setNegativeButton("キャンセル",null).setPositiveButton("削除",(d,w)->{database.clear();ReminderScheduler.all(this);refresh();render();}).show());
         danger.addView(erase,Ui.margin(this,-1,-2,0,17,0,4));body.addView(danger,Ui.margin(this,-1,-2,0,12,0,0));

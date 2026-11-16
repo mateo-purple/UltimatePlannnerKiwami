@@ -11,6 +11,11 @@
         android:icon="@drawable/ic_app"
         android:theme="@style/Theme.Kiwami"
         android:supportsRtl="true">
+        <provider
+            android:name=".CaptureImageProvider"
+            android:authorities="${applicationId}.capture"
+            android:exported="false"
+            android:grantUriPermissions="true"/>
         <activity android:name=".CloudSyncActivity" android:exported="false" android:windowSoftInputMode="adjustResize"/>
         <activity android:name=".EditEventActivity" android:exported="false" android:windowSoftInputMode="adjustResize"/>
         <activity android:name=".ImportActivity" android:exported="false" android:windowSoftInputMode="adjustResize"/>

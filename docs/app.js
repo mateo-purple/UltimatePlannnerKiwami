@@ -1,13 +1,12 @@
 import {CATEGORIES,DAYS,createEntry,normalize,dayStart,weekStart,addDays,fmtDay,fmtMonth,fmtTime,fmtDate,toLocalInput,fromLocalInput,planWeek,prioritizedTasks,mergeByRevision} from './core.js';
 import {CloudClient} from './sync.js';
+import {firebaseConfig} from './firebase-config.js';
 const $=id=>document.getElementById(id);
 const STORAGE_PREFIX='upk-entries-v2:';
 const SETTINGS_KEY='upk-work-settings-v1';
-const FIREBASE_KEY='upk-firebase-config-v1';
 const ONE_HOUR=3600000;
 let owner='guest',entries=readEntries('guest'),activeTab='week',selectedWeek=weekStart(Date.now()),editing=null;
 let settings=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'null') || {fromHour:8,toHour:22,chunk:60};
-let firebaseConfig=JSON.parse(localStorage.getItem(FIREBASE_KEY)||'null') || {};
 let cloud;
 let toastTimer;
 function readEntries(key){try {const value=JSON.parse(localStorage.getItem(STORAGE_PREFIX+key)||'[]');return Array.isArray(value)?value.map(normalize):[];}catch{return [];}}
@@ -82,7 +81,6 @@ function renderTasks(){const list=$('task-list');list.replaceChildren();const ta
   }
 }
 function renderSettings(){const p=n=>String(n).padStart(2,'0');$('work-from').value=`${p(settings.fromHour)}:00`;$('work-to').value=`${p(settings.toHour)}:00`;$('work-chunk').value=String(settings.chunk);
-  $('firebase-project').value=firebaseConfig.projectId||'';$('firebase-key').value=firebaseConfig.apiKey||'';$('firebase-appid').value=firebaseConfig.appId||'';$('firebase-authdomain').value=firebaseConfig.authDomain||'';
 }
 function openEvent(entry=null,kind='fixed',startDay=selectedWeek){
   editing=entry?entry.syncId:null;
@@ -120,7 +118,7 @@ async function initCloud(){cloud=new CloudClient(setCloudUser,handleRemote,updat
   try{await cloud.initialize(firebaseConfig);}catch(error){updateStatus('Firebase接続に失敗');console.error(error);toast('Firebase設定または通信を確認してください');}
 }
 function showAccount(){
-  const online=Boolean(cloud?.auth);$('account-message').textContent=cloud?.user?`ログイン中: ${cloud.user.email}`:online?'メールとパスワードでログインしてください。':'先に「設定 → クラウド同期」でFirebaseを設定してください。';
+  const online=Boolean(cloud?.auth);$('account-message').textContent=cloud?.user?`ログイン中: ${cloud.user.email}`:online?'メールとパスワードでログインしてください。':'クラウドに接続できません。通信状況を確認してください。';
   $('auth-fields').classList.toggle('hidden',Boolean(cloud?.user));$('signed-in-fields').classList.toggle('hidden',!cloud?.user);$('account-dialog').showModal();
 }
 async function login(create){const email=$('auth-email').value.trim(),password=$('auth-password').value;
@@ -139,7 +137,7 @@ function wire(){
   $('account-form').onsubmit=e=>{e.preventDefault();login(false);};$('register-btn').onclick=()=>login(true);
   $('signout-btn').onclick=async()=>{await cloud.logout();$('account-dialog').close();toast('ログアウトしました');};
   $('save-settings').onclick=()=>{settings={fromHour:Number($('work-from').value.split(':')[0]),toHour:Number($('work-to').value.split(':')[0]),chunk:Number($('work-chunk').value)};localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings));toast('設定を保存しました');};
-  $('save-firebase').onclick=()=>{firebaseConfig={projectId:$('firebase-project').value.trim(),apiKey:$('firebase-key').value.trim(),appId:$('firebase-appid').value.trim(),authDomain:$('firebase-authdomain').value.trim()};localStorage.setItem(FIREBASE_KEY,JSON.stringify(firebaseConfig));location.reload();};
+  $('open-account-settings').onclick=showAccount;
   $('export-btn').onclick=()=>{const blob=new Blob([JSON.stringify({format:'UltimatePlannerKiwami-v2',entries,exportedAt:new Date().toISOString()},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`ultimate-planner-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);};
   $('import-btn').onclick=()=>$('import-file').click();$('import-file').onchange=async event=>{try{const file=event.target.files[0];if(!file)return;const data=JSON.parse(await file.text());if(!Array.isArray(data.entries))throw Error('entriesがありません');const imported=data.entries.map(normalize);const {entries:merged}=mergeByRevision(entries,imported);entries=merged;saveEntries();render();if(cloud?.user)cloud.pushMany(imported);toast(`${imported.length}件を読み込みました`);}catch(e){toast('読み込み失敗: '+e.message);}event.target.value='';};
   window.addEventListener('online',()=>{if(cloud?.user){updateStatus('再接続中…');render();}else updateStatus('端末内のみ');});

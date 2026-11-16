@@ -20,12 +20,10 @@
  <section id="settings-view" class="view hidden">
    <div class="settings-grid">
     <section class="panel settings-card"><h2>自動配置</h2><p class="subtle">固定予定を避け、空き時間へ課題を配置します。</p><label>開始時刻 <input id="work-from" type="time" value="08:00"></label><label>終了時刻 <input id="work-to" type="time" value="22:00"></label><label>1回の集中時間<select id="work-chunk"><option value="30">30分</option><option value="60">60分</option><option value="90">90分</option><option value="120">120分</option></select></label><button class="btn primary" id="save-settings" type="button">設定を保存</button></section>
-    <section class="panel settings-card"><h2>クラウド同期</h2><p class="subtle">同じFirebaseプロジェクトとアカウントをAndroid・PC・iPhoneで設定してください。</p>
-     <label>Firebase Project ID<input id="firebase-project" spellcheck="false" autocomplete="off" placeholder="your-project-id"></label>
-     <label>Web API Key<input id="firebase-key" spellcheck="false" autocomplete="off" placeholder="AIza..."></label>
-     <label>Web App ID<input id="firebase-appid" spellcheck="false" autocomplete="off" placeholder="1:...:web:..."></label>
-     <label>Auth Domain<input id="firebase-authdomain" spellcheck="false" autocomplete="off" placeholder="your-project.firebaseapp.com"></label>
-     <button class="btn primary" id="save-firebase" type="button">接続設定を保存して再読込</button><p class="hint">設定値はこのブラウザ内に保存します。FirebaseのAuthentication（メール/パスワード）とFirestoreを有効にしてください。</p>
+    <section class="panel settings-card"><h2>クラウド同期</h2>
+      <p class="subtle">PC・iPhone・Androidで同じアカウントにログインすると、予定を同期できます。Firebaseの接続設定はアプリに組み込み済みです。</p>
+      <button class="btn primary" id="open-account-settings" type="button">アカウント・ログイン</button>
+      <p class="hint">予定の閲覧・編集はオフラインでもできます。同期にはインターネット接続が必要です。</p>
     </section>
     <section class="panel settings-card"><h2>データの書き出し</h2><p class="subtle">端末内データをJSONで保存できます。クラウド同期の代わりに利用することもできます。</p><div class="setting-buttons"><button id="export-btn" class="btn" type="button">JSONを保存</button><button id="import-btn" class="btn" type="button">JSONを読み込む</button><input id="import-file" type="file" accept="application/json,.json" hidden></div></section>
    </div>

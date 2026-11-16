@@ -1,5 +1,5 @@
 import {normalize} from './core.js';
-/** Firebase browser SDK is loaded only after configuration so offline-only mode needs no network. */
+/** Firebase SDK loads when the app starts; local schedules still work when offline. */
 const VERSION='13.2.0';
 const CDN='https://www.gstatic.com/firebasejs/';
 export class CloudClient {
@@ -26,7 +26,7 @@ export class CloudClient {
     this.onStatus('同期中…');
   }
   async login(email,password,create=false){
-    if(!this.auth)throw Error('Firebase設定を保存してからページを再読み込みしてください');
+    if(!this.auth)throw Error('Firebaseに接続できません。通信状況を確認してください');
     const fn=create?this.authApi.createUserWithEmailAndPassword:this.authApi.signInWithEmailAndPassword;
     await fn(this.auth,email,password);
   }
