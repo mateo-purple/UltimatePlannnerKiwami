@@ -10,6 +10,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.UnknownHostException;
+import java.net.SocketTimeoutException;
+import java.net.ConnectException;
+import javax.net.ssl.SSLHandshakeException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -185,5 +189,15 @@ public final class CloudSync {
         return response.isEmpty()?new JSONObject():new JSONObject(response);
     }
     private static String enc(String s)throws Exception{return URLEncoder.encode(s,"UTF-8");}
-    private static String safeMessage(Exception e){String message=e.getMessage();return message==null?e.getClass().getSimpleName():message;}
+    private static String safeMessage(Exception e){
+        if(e instanceof UnknownHostException)return "通信先を見つけられません。Wi-Fi・DNS・学内プロキシを確認してください";
+        if(e instanceof SocketTimeoutException)return "接続がタイムアウトしました。回線やプロキシ設定を確認してください";
+        if(e instanceof ConnectException)return "ネットワークへ接続できません。Wi-Fi・テザリングを確認してください";
+        if(e instanceof SSLHandshakeException)return "HTTPS証明書の確認に失敗しました。端末の日時とネットワーク設定を確認してください";
+        String message=e.getMessage();
+        if(message==null)return e.getClass().getSimpleName();
+        if(message.contains("HTTP 407"))return "学内プロキシの認証が必要です（HTTP 407）。Wi-Fiのプロキシ設定を確認してください";
+        if(message.contains("HTTP 403")||message.contains("PERMISSION_DENIED"))return "Firestoreへのアクセスが拒否されました。ログインとFirestoreルールを確認してください";
+        return message.replace(FirebaseConfig.WEB_API_KEY,"[API KEY]");
+    }
 }

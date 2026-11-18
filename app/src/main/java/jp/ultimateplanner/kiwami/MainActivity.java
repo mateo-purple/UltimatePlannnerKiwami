@@ -221,6 +221,12 @@ public class MainActivity extends Activity {
         LinearLayout about=Ui.card(this);about.addView(Ui.text(this,"取り込みについて",16,Ui.INK,true));
         Ui.attach(about,Ui.text(this,"画像内の日本語を端末上で読み取ります。eシラバスなどの共有テキスト・画像にも対応します。読み取り完了後、予定として自動登録します。誤認識は登録結果から編集・取り消しできます。ログインが必要なページの自動取得には対応していません。",13,Ui.MUTED),10);
         TextView importBtn=Ui.button(this,"カメラで取り込む",false);importBtn.setOnClickListener(v->importNew());about.addView(importBtn,Ui.margin(this,-1,-2,0,15,0,0));body.addView(about,Ui.margin(this,-1,-2,0,12,0,0));
+        LinearLayout backupCard=Ui.card(this);backupCard.addView(Ui.text(this,"データのバックアップ",16,Ui.INK,true));
+        Ui.attach(backupCard,Ui.text(this,"通信がなくても予定をJSONファイルに保存・復元できます。Web版と共通形式です。",13,Ui.MUTED),10);
+        TextView backupButton=Ui.button(this,"JSONの保存・復元",false);
+        backupButton.setOnClickListener(v->startActivity(new Intent(this,BackupActivity.class)));
+        backupCard.addView(backupButton,Ui.margin(this,-1,-2,0,12,0,0));
+        body.addView(backupCard,Ui.margin(this,-1,-2,0,0,0,12));
         LinearLayout danger=Ui.card(this);danger.addView(Ui.text(this,"データ管理",16,Ui.INK,true));
         TextView erase=Ui.text(this,"すべての予定とタスクを削除",14,Ui.RED,true);erase.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("すべて削除しますか？").setMessage("復元できません。登録した予定・タスクを消去します。").setNegativeButton("キャンセル",null).setPositiveButton("削除",(d,w)->{database.clear();ReminderScheduler.all(this);refresh();render();}).show());
         danger.addView(erase,Ui.margin(this,-1,-2,0,17,0,4));body.addView(danger,Ui.margin(this,-1,-2,0,12,0,0));

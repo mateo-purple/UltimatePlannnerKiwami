@@ -1,16 +1,33 @@
-# UltimatePlannerKiwami v7（Firebase接続済み）
+# UltimatePlannerKiwami v8（Firebase接続済み）
 
 - Web版：`docs/` をCloudflare Workersの静的アセットとしてアップロードしてください。
 - Android版：このフォルダをAndroid Studioで開いて `app` を実機へRunしてください。
 - FirebaseのProject ID/APIキーは開発側で組み込み済み。利用者は同じメールアドレス・パスワードでログインするだけです。
 - AndroidのアプリID（`jp.ultimateplanner.kiwami`）は変更していないため、通常の上書きインストールでローカルデータを保持します。ただし署名キーが異なる場合は上書きできません。**アンインストールして対処しないでください。**
 - v6の週間時間割高速化とカメラ起動対応を継承しています。
+- v8でAndroidにもJSONバックアップ・復元を追加しました。Wi-Fiがなくても端末内の予定を保存できます。
+- 同期画面では接続状態と端末に設定されたプロキシを読み取り専用で案内します。プロキシの設定はアプリから変更しません。
+- Web版は再接続まで直前のログインユーザーの保存済み予定をオフライン表示します。
+- GitHub ActionsでAndroid APKを成果物として提供します（GitHubにログインしてActions画面からダウンロード）。
 - Firestore Rulesは `firestore.rules` を管理画面で公開してください。アプリのGitHub更新だけではルールは変更されません。
 - 詳細は `docs/README.md` を参照してください。
 
 # アルティメットプランナー極み(仮)
 
 Java製のAndroid予定・タスク管理アプリです。既存の授業用 `ExSample` とは独立したAndroid Studioプロジェクトです。
+
+## 配布・更新方法
+
+- Web版: `docs/` に最新版を配置。GitHub Pagesはこのフォルダを公開し、Cloudflare Workersは手動で `docs/` 全体を再アップロードします。**GitHubを更新しただけではCloudflareの公開済みサイトは更新されません。**
+- Android APK: GitHub Actions → Test Web and Android の成功した実行 → Artifacts → **UltimatePlannerKiwami-debug-APK**。ZIPを展開すると `app-debug.apk` が含まれます。署名はビルド環境のデバッグキーであり、以前のAndroid Studio実機版とは署名が異なる可能性があります。署名が違う場合、既存アプリを削除するとローカルデータも消えるため、必要に応じてJSONバックアップを取得してください。
+- Android Studio利用者: このリポジトリを開き、JDK 17または21、Gradle 8.9、Android SDK 35でビルドします。APKを上書きする場合は同一の署名が必要です。
+
+## 学内ネットワーク・プロキシへの注意
+
+- 金沢工業大学の `KIT-WLAP2` は学内の案内に従って端末のWi-Fi認証・プロキシ設定を行ってください。Androidアプリは**端末に設定済みのプロキシを読み取るだけ**で、変更しません。
+- 大学のプロキシ設定を `gradle.properties` やGitHubリポジトリへ埋め込まないでください。大学外やCloudflare公開先のユーザーにその設定を強制してはいけません。
+- ビルドに必要なGradleなどのダウンロードが学校のネットワークで失敗する場合、別のネットワークか既存のキャッシュでビルドを検討してください。システム全体のプロキシ変更は不要です。
+- プロキシ環境でクラウド同期が失敗しても、端末内の予定は利用可能で、JSONバックアップも通信不要です。
 
 ## 起動方法（Windows）
 
@@ -20,7 +37,7 @@ Java製のAndroid予定・タスク管理アプリです。既存の授業用 `E
 4. 不足するSDK 35がある場合、Android Studioの案内に従ってインストールしてください。Android SDK 26以上の端末またはエミュレーターを選び、上部の **Run ▶** を押します。
 5. Android 13以降では、締切通知を使うため通知権限を許可します。
 
-推奨: JDK 17（Android Studio内蔵のGradle JDKで構いません）。アプリIDは `jp.ultimateplanner.kiwami` です。
+推奨: JDK 17または21（Gradle 8.9ではJDK 25を使用しないでください）。アプリIDは `jp.ultimateplanner.kiwami` です。
 
 ## 画面と機能
 

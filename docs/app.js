@@ -4,8 +4,13 @@ import {firebaseConfig} from './firebase-config.js';
 const $=id=>document.getElementById(id);
 const STORAGE_PREFIX='upk-entries-v2:';
 const SETTINGS_KEY='upk-work-settings-v1';
+const LAST_USER_KEY='upk-last-signed-in-user-v1';
 const ONE_HOUR=3600000;
-let owner='guest',entries=readEntries('guest'),activeTab='week',selectedWeek=weekStart(Date.now()),editing=null;
+let rememberedUser=null;
+try{rememberedUser=JSON.parse(localStorage.getItem(LAST_USER_KEY)||'null');}catch{}
+let owner=rememberedUser?.projectId===firebaseConfig.projectId&&rememberedUser.uid
+  ? 'user:'+firebaseConfig.projectId+':'+rememberedUser.uid : 'guest';
+let entries=readEntries(owner),activeTab='week',selectedWeek=weekStart(Date.now()),editing=null;
 let settings=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'null') || {fromHour:8,toHour:22,chunk:60};
 let cloud;
 let toastTimer;
@@ -106,6 +111,8 @@ function saveEvent(event){event.preventDefault();const title=$('event-title').va
 }
 function handleRemote(remote){const {entries:merged,upload}=mergeByRevision(entries,remote);entries=merged;saveEntries();render();cloud.pushMany(upload);}
 function setCloudUser(user){
+  if(user)localStorage.setItem(LAST_USER_KEY,JSON.stringify({uid:user.uid,email:user.email,projectId:firebaseConfig.projectId}));
+  else localStorage.removeItem(LAST_USER_KEY);
   const next=user?'user:'+firebaseConfig.projectId+':'+user.uid:'guest';
   if(user){const original=readEntries(next);const guest=readEntries('guest');const merged=mergeByRevision(original,guest).entries;
     // Guest records are copied once, then removed from the guest workspace.
@@ -115,7 +122,7 @@ function setCloudUser(user){
   if(user)toast('ログインしました。同期を開始します。');
 }
 async function initCloud(){cloud=new CloudClient(setCloudUser,handleRemote,updateStatus);
-  try{await cloud.initialize(firebaseConfig);}catch(error){updateStatus('Firebase接続に失敗');console.error(error);toast('Firebase設定または通信を確認してください');}
+  try{await cloud.initialize(firebaseConfig);}catch(error){updateStatus(owner!=='guest'?'オフライン・端末内の予定を表示':'端末内のみ');console.error(error);toast('クラウドへ接続できません。端末内の予定は利用できます');}
 }
 function showAccount(){
   const online=Boolean(cloud?.auth);$('account-message').textContent=cloud?.user?`ログイン中: ${cloud.user.email}`:online?'メールとパスワードでログインしてください。':'クラウドに接続できません。通信状況を確認してください。';
@@ -135,11 +142,22 @@ function wire(){
   $('delete-event').onclick=()=>{const e=entries.find(e=>e.syncId===editing);if(e)removeEntry(e);};
   $('account-button').onclick=showAccount;$('close-account').onclick=()=>{$('account-dialog').close();};
   $('account-form').onsubmit=e=>{e.preventDefault();login(false);};$('register-btn').onclick=()=>login(true);
-  $('signout-btn').onclick=async()=>{await cloud.logout();$('account-dialog').close();toast('ログアウトしました');};
+  $('signout-btn').onclick=async()=>{await cloud.logout();localStorage.removeItem(LAST_USER_KEY);$('account-dialog').close();toast('ログアウトしました');};
   $('save-settings').onclick=()=>{settings={fromHour:Number($('work-from').value.split(':')[0]),toHour:Number($('work-to').value.split(':')[0]),chunk:Number($('work-chunk').value)};localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings));toast('設定を保存しました');};
   $('open-account-settings').onclick=showAccount;
   $('export-btn').onclick=()=>{const blob=new Blob([JSON.stringify({format:'UltimatePlannerKiwami-v2',entries,exportedAt:new Date().toISOString()},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`ultimate-planner-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);};
-  $('import-btn').onclick=()=>$('import-file').click();$('import-file').onchange=async event=>{try{const file=event.target.files[0];if(!file)return;const data=JSON.parse(await file.text());if(!Array.isArray(data.entries))throw Error('entriesがありません');const imported=data.entries.map(normalize);const {entries:merged}=mergeByRevision(entries,imported);entries=merged;saveEntries();render();if(cloud?.user)cloud.pushMany(imported);toast(`${imported.length}件を読み込みました`);}catch(e){toast('読み込み失敗: '+e.message);}event.target.value='';};
+  $('import-btn').onclick=()=>$('import-file').click();$('import-file').onchange=async event=>{try{
+    const file=event.target.files[0];if(!file)return;
+    if(file.size>8*1024*1024)throw Error('8MBを超えるファイルは読み込めません');
+    const data=JSON.parse(await file.text());
+    if(data.format!=='UltimatePlannerKiwami-v2'||!Array.isArray(data.entries))throw Error('対応していないJSON形式です');
+    if(data.entries.length>20000)throw Error('予定の件数が多すぎます');
+    const imported=data.entries.filter(x=>x&&typeof x==='object'&&String(x.title||'').trim()).map(normalize);
+    const {entries:merged}=mergeByRevision(entries,imported);
+    entries=merged;saveEntries();render();
+    if(cloud?.user){const ids=new Set(imported.map(e=>e.syncId));cloud.pushMany(merged.filter(e=>ids.has(e.syncId)));}
+    toast(`${imported.length}件を読み込みました`);
+  }catch(e){toast('読み込み失敗: '+e.message);}event.target.value='';};
   window.addEventListener('online',()=>{if(cloud?.user){updateStatus('再接続中…');render();}else updateStatus('端末内のみ');});
 }
 wire();render();initCloud();

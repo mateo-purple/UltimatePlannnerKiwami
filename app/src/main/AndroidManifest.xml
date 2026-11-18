@@ -16,6 +16,7 @@
             android:authorities="${applicationId}.capture"
             android:exported="false"
             android:grantUriPermissions="true"/>
+        <activity android:name=".BackupActivity" android:exported="false"/>
         <activity android:name=".CloudSyncActivity" android:exported="false" android:windowSoftInputMode="adjustResize"/>
         <activity android:name=".EditEventActivity" android:exported="false" android:windowSoftInputMode="adjustResize"/>
         <activity android:name=".ImportActivity" android:exported="false" android:windowSoftInputMode="adjustResize"/>
