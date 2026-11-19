@@ -12,7 +12,7 @@ import java.util.UUID;
 /** SQLite remains authoritative for offline UI. A stable sync_id links each row to Firestore. */
 public class ScheduleDatabase extends SQLiteOpenHelper {
     private static final String NAME = "ultimateplannerkiwami.db";
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
     public ScheduleDatabase(Context c) { super(c, NAME, null, VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -21,7 +21,9 @@ public class ScheduleDatabase extends SQLiteOpenHelper {
             "fixed INTEGER NOT NULL DEFAULT 0, weekly INTEGER NOT NULL DEFAULT 0,"+
             "start_ms INTEGER, end_ms INTEGER, deadline_ms INTEGER,"+
             "estimate_min INTEGER, progress INTEGER, difficulty INTEGER, created_ms INTEGER,"+
-            "sync_id TEXT, updated_ms INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0)");
+            "sync_id TEXT, updated_ms INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0,"+
+            "url TEXT NOT NULL DEFAULT '', history TEXT NOT NULL DEFAULT '', skipped_days TEXT NOT NULL DEFAULT '',"+
+            "resume_after_ms INTEGER NOT NULL DEFAULT 0, replan_target_ms INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("CREATE UNIQUE INDEX idx_entries_sync_id ON entries(sync_id)");
     }
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
@@ -40,10 +42,19 @@ public class ScheduleDatabase extends SQLiteOpenHelper {
             }
             db.execSQL("CREATE UNIQUE INDEX idx_entries_sync_id ON entries(sync_id)");
         }
+        if(oldVersion < 3){
+            db.execSQL("ALTER TABLE entries ADD COLUMN url TEXT NOT NULL DEFAULT ''");
+            db.execSQL("ALTER TABLE entries ADD COLUMN history TEXT NOT NULL DEFAULT ''");
+            db.execSQL("ALTER TABLE entries ADD COLUMN skipped_days TEXT NOT NULL DEFAULT ''");
+            db.execSQL("ALTER TABLE entries ADD COLUMN resume_after_ms INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE entries ADD COLUMN replan_target_ms INTEGER NOT NULL DEFAULT 0");
+        }
     }
     private ContentValues values(Entry e) {
         ContentValues v = new ContentValues();
-        v.put("title", e.title); v.put("note", e.note); v.put("category", e.category);
+        v.put("title", e.title); v.put("note", e.note); v.put("url",e.url);
+        v.put("history",e.history);v.put("skipped_days",e.skippedDays);
+        v.put("resume_after_ms",e.resumeAfterMs);v.put("replan_target_ms",e.replanTargetMs); v.put("category", e.category);
         v.put("source", e.source); v.put("fixed", e.fixed ? 1 : 0);
         v.put("weekly", e.weekly ? 1 : 0); v.put("start_ms",e.startMs);
         v.put("end_ms",e.endMs); v.put("deadline_ms",e.deadlineMs);
@@ -82,6 +93,11 @@ public class ScheduleDatabase extends SQLiteOpenHelper {
         e.id = c.getLong(c.getColumnIndexOrThrow("id"));
         e.title = c.getString(c.getColumnIndexOrThrow("title"));
         e.note = c.getString(c.getColumnIndexOrThrow("note"));
+        e.url=c.getString(c.getColumnIndexOrThrow("url"));
+        e.history=c.getString(c.getColumnIndexOrThrow("history"));
+        e.skippedDays=c.getString(c.getColumnIndexOrThrow("skipped_days"));
+        e.resumeAfterMs=c.getLong(c.getColumnIndexOrThrow("resume_after_ms"));
+        e.replanTargetMs=c.getLong(c.getColumnIndexOrThrow("replan_target_ms"));
         e.category = c.getString(c.getColumnIndexOrThrow("category"));
         e.source = c.getString(c.getColumnIndexOrThrow("source"));
         e.fixed = c.getInt(c.getColumnIndexOrThrow("fixed")) != 0;

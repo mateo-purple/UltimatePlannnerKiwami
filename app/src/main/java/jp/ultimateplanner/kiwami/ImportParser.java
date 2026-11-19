@@ -5,10 +5,10 @@ import java.util.regex.*;
 
 /** Offline heuristics. Parsed suggestions are saved immediately by ImportActivity. */
 public final class ImportParser {
-    public static final class Suggestion {public String title="",note="",category="課題";public boolean fixed;public long deadline,start,end;public int estimateMin=60;}
+    public static final class Suggestion {public String title="",note="",category="課題";public boolean fixed;public long deadline,start,end;public int estimateMin=60;public String url="";}
     private ImportParser(){}
     public static Suggestion parse(String raw){
-        Suggestion s=new Suggestion();String text=raw==null?"":raw.replace('：',':').replace('／','/').replace('～','〜').trim();s.note=raw==null?"":raw.trim();
+        Suggestion s=new Suggestion();String text=raw==null?"":raw.replace('：',':').replace('／','/').replace('～','〜').trim();s.note=raw==null?"":raw.trim();s.url=findUrl(raw);
         if(text.isEmpty())return s;
         String[] lines=text.split("[\\r\\n]+");for(String line:lines){String candidate=line.trim();if(candidate.length()<2||candidate.matches("^https?://.*")||candidate.matches("^[\\d\\s/:〜\\-.]+$"))continue;
             if(candidate.length()>80)continue;
@@ -65,10 +65,23 @@ public final class ImportParser {
         }
         // Only split when entries actually occur on multiple independently dated lines.
         if(dated.size()>=2&&dated.size()<=15){
-            for(String line:dated){Suggestion s=parse(line);if(!s.title.isEmpty())out.add(s);}
+            String commonUrl=findUrl(raw);
+            for(String line:dated){Suggestion s=parse(line);if(s.url.isEmpty())s.url=commonUrl;if(!s.title.isEmpty())out.add(s);}
             return out;
         }
         out.add(parse(raw));return out;
+    }
+    /** Pure Java URL extraction shared by OCR and imported screenshots. */
+    public static String findUrl(String text){
+        if(text==null)return "";
+        Matcher m=Pattern.compile("(?i)https?://[^\\s<>()]+").matcher(text);
+        while(m.find()){
+            String value=m.group().replaceAll("[.,;:!?）)、。]+$","");
+            try{java.net.URI uri=new java.net.URI(value);
+                if(uri.getHost()!=null && ("https".equalsIgnoreCase(uri.getScheme())||"http".equalsIgnoreCase(uri.getScheme())))return value;
+            }catch(Exception ignored){}
+        }
+        return "";
     }
     private static boolean contains(String text,String... words){for(String w:words)if(text.contains(w))return true;return false;}
     private static List<Integer> times(String s){List<Integer> out=new ArrayList<>();Matcher m=Pattern.compile("(?<![0-9])([01]?\\d|2[0-3])[:時]([0-5]\\d)(?![0-9])").matcher(s);

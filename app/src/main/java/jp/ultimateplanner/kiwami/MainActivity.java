@@ -14,8 +14,8 @@ import java.util.*;
 
 /** Main navigation: overview / weekly agenda / tasks / settings. All screens are native views. */
 public class MainActivity extends Activity {
-    private final String[] names={"ホーム","予定表","タスク","設定"};
-    private final String[] symbols={"⌂","▦","☑","⚙"};
+    private final String[] names={"ホーム","予定表","タスク","予定変更","設定"};
+    private final String[] symbols={"⌂","▦","☑","↻","⚙"};
     private LinearLayout root,body,bar;
     private int page=1; // Start directly on the usable weekly timetable.
     private long selectedDay=TimeUtil.day(System.currentTimeMillis());
@@ -72,7 +72,7 @@ public class MainActivity extends Activity {
             Ui.padding(body,20,22,20,30);
             scroll.addView(body);
             root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-            if(page==0)home();else if(page==2)tasks();else settings();
+            if(page==0)home();else if(page==2)tasks();else if(page==3)recovery();else settings();
         }
         bottom();}
     private TextView topAction(String s){TextView v=Ui.text(this,s,24,Ui.INK,true);v.setGravity(Gravity.CENTER);Ui.bg(v,Ui.BG,14);return v;}
@@ -195,6 +195,63 @@ public class MainActivity extends Activity {
         card.addView(action,Ui.margin(this,-1,-2,0,14,0,0));body.addView(card,Ui.margin(this,-1,-2,0,9,0,0));}
     private void emptyCard(String title,String subtitle){LinearLayout c=Ui.card(this);Ui.attach(c,Ui.text(this,title,15,Ui.INK,true),0);Ui.attach(c,Ui.text(this,subtitle,13,Ui.MUTED),7);body.addView(c,Ui.margin(this,-1,-2,0,11,0,0));}
     private void link(LinearLayout parent,String s,Runnable r){TextView t=Ui.text(this,s+"  ›",14,Ui.PURPLE,true);t.setOnClickListener(v->r.run());parent.addView(t,Ui.margin(this,-1,42,0,8,0,0));}
+
+    /** Missed appointments, retry history and sick-day deferral. */
+    private void recovery(){
+        heading("予定変更","未完了の予定を再計画し、体調不良の日は後ろへ移せます");
+        LinearLayout sick=Ui.card(this);sick.addView(Ui.text(this,"体調不良で予定をずらす",16,Ui.INK,true));
+        Ui.attach(sick,Ui.text(this,"対象期間の未完了予定を後日へ移動します。授業・面接・アルバイトは振替候補として登録し、元の毎週予定は翌週以降そのまま残します。締切そのものは変更しません。",12,Ui.MUTED),7);
+        LinearLayout choices=Ui.horizontal(this);
+        int[] spans={1,2,3};String[] labels={"今日だけ","2日間","3日間"};
+        for(int i=0;i<spans.length;i++){
+            final int d=spans[i];TextView option=Ui.button(this,labels[i],false);option.setTextSize(12);
+            option.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("体調不良を申請しますか？")
+                .setMessage("今日から"+d+"日間の未完了予定を後日に移します。これはアプリ内での変更です。外部の締切や予約は自動変更されません。")
+                .setNegativeButton("キャンセル",null).setPositiveButton("予定を変更",(dialog,which)->applyIllness(d)).show());
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(Ui.dp(this,2),Ui.dp(this,10),Ui.dp(this,2),0);choices.addView(option,lp);
+        }
+        sick.addView(choices);body.addView(sick,Ui.margin(this,-1,-2,0,12,0,22));
+        Ui.attach(body,Ui.section(this,"直近の未完了・履歴"),0);
+        List<Entry> recent=new ArrayList<>();long now=System.currentTimeMillis();
+        for(Entry e:entries){
+            if(RecoveryPlanner.missed(e,now) || (e.history!=null&&!e.history.isEmpty()))recent.add(e);
+        }
+        recent.sort((a,b)->Long.compare(Math.max(b.updatedMs,b.deadlineMs),Math.max(a.updatedMs,a.deadlineMs)));
+        if(recent.isEmpty()){emptyCard("該当する予定はありません","直近21日間の未完了予定と変更履歴が表示されます");return;}
+        int shown=0;
+        for(Entry e:recent){if(shown++>=45)break;
+            LinearLayout card=Ui.card(this);card.addView(Ui.text(this,e.title,16,Ui.INK,true));
+            String when=e.fixed?"予定 "+TimeUtil.fmt(e.startMs,"M/d H:mm"):"締切 "+(e.deadlineMs>0?TimeUtil.fmt(e.deadlineMs,"M/d H:mm"):"未設定");
+            Ui.attach(card,Ui.text(this,when+(e.progress>=100?" · 完了済み":" · 未完了"),12,Ui.MUTED),6);
+            String last=RecoveryPlanner.latestHistory(e);if(!last.isEmpty())Ui.attach(card,Ui.text(this,"変更履歴: "+last,12,Ui.MUTED),6);
+            LinearLayout row=Ui.horizontal(this);
+            TextView retry=Ui.button(this,"もう一度組み込む",true);retry.setTextSize(12);
+            retry.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("予定を再計画")
+                .setMessage("「"+e.title+"」を空き時間へ戻します。元の締切は変更しません。")
+                .setNegativeButton("キャンセル",null).setPositiveButton("再計画",(d,w)->{
+                    Entry changed=RecoveryPlanner.manual(e,entries,System.currentTimeMillis());database.save(changed);
+                    ReminderScheduler.update(this,changed);CloudSync.sync(this,false,null);refresh();render();
+                }).show());
+            row.addView(retry,new LinearLayout.LayoutParams(0,-2,2));
+            TextView editButton=Ui.button(this,"編集",false);editButton.setTextSize(12);editButton.setOnClickListener(v->edit(e));
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(Ui.dp(this,6),0,0,0);row.addView(editButton,lp);
+            card.addView(row,Ui.margin(this,-1,-2,0,12,0,0));
+            LinearLayout secondary=Ui.horizontal(this);
+            if(e.progress<100){TextView completed=Ui.text(this,"✓ 完了にする",13,Ui.GREEN,true);
+                completed.setOnClickListener(v->{e.progress=100;database.save(e);ReminderScheduler.cancel(this,e);CloudSync.sync(this,false,null);refresh();render();});
+                secondary.addView(completed,new LinearLayout.LayoutParams(0,-2,1));}
+            if(UrlTools.valid(e.url)){TextView open=Ui.text(this,"関連URLを開く ↗",13,Ui.PURPLE,true);open.setOnClickListener(v->UrlTools.open(this,e.url));secondary.addView(open);}
+            if(secondary.getChildCount()>0)card.addView(secondary,Ui.margin(this,-1,-2,0,13,0,0));
+            body.addView(card,Ui.margin(this,-1,-2,0,9,0,0));
+        }
+    }
+    private void applyIllness(int days){
+        List<Entry> changed=RecoveryPlanner.illness(entries,System.currentTimeMillis(),days);
+        for(Entry e:changed){database.save(e);ReminderScheduler.update(this,e);}
+        if(!changed.isEmpty())CloudSync.sync(this,false,null);
+        Toast.makeText(this,changed.size()+"件を再計画しました",Toast.LENGTH_LONG).show();
+        refresh();render();
+    }
 
     private void settings(){heading("設定","自動配置と通知の動作を調整します");
         LinearLayout cloudCard=Ui.card(this);cloudCard.addView(Ui.text(this,"端末間の同期",16,Ui.INK,true));

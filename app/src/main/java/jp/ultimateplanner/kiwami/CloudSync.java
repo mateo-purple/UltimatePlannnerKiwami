@@ -149,7 +149,9 @@ public final class CloudSync {
     }
     private static JSONObject toDoc(Entry e)throws Exception{
         JSONObject v=new JSONObject();
-        putStr(v,"syncId",e.syncId);putStr(v,"title",e.title);putStr(v,"note",e.note);putStr(v,"category",e.category);putStr(v,"source",e.source);
+        putStr(v,"syncId",e.syncId);putStr(v,"title",e.title);putStr(v,"note",e.note);
+        putStr(v,"url",e.url);putStr(v,"history",e.history);putStr(v,"skippedDays",e.skippedDays);
+        putLong(v,"resumeAfterMs",e.resumeAfterMs);putLong(v,"replanTargetMs",e.replanTargetMs);putStr(v,"category",e.category);putStr(v,"source",e.source);
         putBool(v,"fixed",e.fixed);putBool(v,"weekly",e.weekly);putBool(v,"deleted",e.deleted);
         putLong(v,"startMs",e.startMs);putLong(v,"endMs",e.endMs);putLong(v,"deadlineMs",e.deadlineMs);
         putLong(v,"estimateMin",e.estimateMin);putLong(v,"progress",e.progress);putLong(v,"difficulty",e.difficulty);
@@ -163,7 +165,8 @@ public final class CloudSync {
     private static boolean getBool(JSONObject d,String k){JSONObject v=d.optJSONObject(k);return v!=null&&v.optBoolean("booleanValue",false);}
     private static Entry fromDoc(JSONObject f,String id){
         Entry e=new Entry();e.syncId=id;e.title=getStr(f,"title","");e.note=getStr(f,"note","");e.category=getStr(f,"category","課題");
-        e.source=getStr(f,"source","同期");e.fixed=getBool(f,"fixed");e.weekly=getBool(f,"weekly");e.deleted=getBool(f,"deleted");
+        e.source=getStr(f,"source","同期");e.url=getStr(f,"url","");e.history=getStr(f,"history","");e.skippedDays=getStr(f,"skippedDays","");
+        e.resumeAfterMs=getLong(f,"resumeAfterMs",0);e.replanTargetMs=getLong(f,"replanTargetMs",0);e.fixed=getBool(f,"fixed");e.weekly=getBool(f,"weekly");e.deleted=getBool(f,"deleted");
         e.startMs=getLong(f,"startMs",0);e.endMs=getLong(f,"endMs",0);e.deadlineMs=getLong(f,"deadlineMs",0);
         e.estimateMin=(int)getLong(f,"estimateMin",60);e.progress=(int)getLong(f,"progress",0);e.difficulty=(int)getLong(f,"difficulty",3);
         e.createdMs=getLong(f,"createdMs",System.currentTimeMillis());e.updatedMs=getLong(f,"updatedMs",0);return e;

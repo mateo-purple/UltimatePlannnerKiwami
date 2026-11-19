@@ -13,7 +13,7 @@ import java.util.*;
 public class EditEventActivity extends Activity {
     private ScheduleDatabase db;
     private Entry entry;
-    private EditText title,note,estimate;
+    private EditText title,note,estimate,url;
     private Spinner category;
     private LinearLayout taskBox,fixedBox;
     private TextView dateBtn,startBtn,endBtn,progressLabel,difficultyLabel;
@@ -60,6 +60,11 @@ public class EditEventActivity extends Activity {
         TextView weeklyHint=Ui.text(this,"開始日に選んだ曜日を基準に、翌週以降も自動で予定表に表示します。終了日は設定不要です。",12,Ui.MUTED,false);
         fixedBox.addView(weeklyHint,Ui.margin(this,-1,-2,0,6,0,0));
         form.addView(fixedBox,Ui.lp(this,-1,-2));
+        Ui.fieldLabel(form,"関連URL（任意）");url=Ui.field(this,"https://...",entry.url,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);form.addView(url,Ui.lp(this,-1,-2));
+        if(entry.url!=null && !entry.url.isEmpty()){
+            TextView open=Ui.button(this,"URLを開く ↗",false);
+            open.setOnClickListener(v->UrlTools.open(this,entry.url));form.addView(open,Ui.margin(this,-1,-2,0,7,0,0));
+        }
         Ui.fieldLabel(form,"メモ");note=Ui.field(this,"備考・提出先・持ち物など",entry.note,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);note.setSingleLine(false);note.setMinLines(3);note.setGravity(Gravity.TOP);form.addView(note,Ui.lp(this,-1,-2));
         LinearLayout actions=Ui.horizontal(this);TextView save=Ui.button(this,"保存する",true);save.setOnClickListener(v->save());actions.addView(save,new LinearLayout.LayoutParams(0,-2,1));
         if(entry.id>0){TextView delete=Ui.button(this,"削除",false);delete.setTextColor(Ui.RED);delete.setOnClickListener(v->delete());actions.addView(delete,Ui.margin(this,-2,-2,10,0,0,0));}
@@ -72,7 +77,8 @@ public class EditEventActivity extends Activity {
     private void pickDateTime(boolean deadline){long initial=entry.deadlineMs>0?entry.deadlineMs:TimeUtil.at(TimeUtil.day(System.currentTimeMillis()+86400000L),23,59);if(deadline)datePick(initial,n->entry.deadlineMs=n);else datePick(entry.startMs,n->{long span=entry.endMs-entry.startMs;entry.startMs=n;entry.endMs=n+Math.max(span,15*60000L);});}
     private void pickEndTime(){datePick(entry.endMs,n->entry.endMs=n);}
     private void save(){String name=title.getText().toString().trim();if(name.isEmpty()){title.setError("タイトルを入力してください");title.requestFocus();return;}
-        entry.title=name;entry.note=note.getText().toString().trim();entry.category=(String)category.getSelectedItem();entry.fixed=fixed;entry.weekly=fixed&&repeat.isChecked();
+        String link=url.getText().toString().trim();if(!link.isEmpty()&&!UrlTools.valid(link)){url.setError("https:// または http:// で始まるURLを入力してください");return;}
+        entry.url=link;entry.title=name;entry.note=note.getText().toString().trim();entry.category=(String)category.getSelectedItem();entry.fixed=fixed;entry.weekly=fixed&&repeat.isChecked();
         if(fixed){if(entry.endMs<=entry.startMs){Ui.alert(this,"日時を確認してください","終了日時は開始日時より後にしてください。");return;}}
         else{int minutes;try{minutes=Integer.parseInt(estimate.getText().toString().trim());}catch(Exception ex){estimate.setError("数字を入力してください");return;}
             if(minutes<=0||minutes>100000){estimate.setError("1～100000分で入力してください");return;}entry.estimateMin=minutes;entry.progress=progress.getProgress();entry.difficulty=difficulty.getProgress()+1;}

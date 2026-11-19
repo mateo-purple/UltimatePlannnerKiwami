@@ -17,6 +17,8 @@ public final class ImportParserTest {
         List<ImportParser.Suggestion> two=ImportParser.parseMany("企業面接 2026/11/25 14:00〜15:00\nバイト 2026/11/26 18:00〜22:00");
         check(two.size()==2,"multiple dated rows");
         check(TimeUtil.weekStart(two.get(0).start)<=two.get(0).start,"valid week date");
+        check("https://example.com/path".equals(ImportParser.findUrl("資料: https://example.com/path。")),"OCR URL extraction");
+        check(ImportParser.parseMany("課題 2026/11/25\n面談 2026/11/26\nhttps://example.com/info").get(0).url.equals("https://example.com/info"),"common URL for multi-event screenshot");
         System.out.println("ImportParser checks passed");
     }
 }

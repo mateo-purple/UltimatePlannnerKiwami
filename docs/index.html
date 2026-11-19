@@ -10,13 +10,18 @@
 </header>
 <main>
  <div class="page-heading"><div><h1 id="page-title">週間予定表</h1><p id="page-subtitle">空いている時間がひと目で分かる週間ビュー</p></div><button id="add-btn" class="btn primary" type="button">＋ 予定を追加</button></div>
- <div class="tabs" role="tablist" aria-label="画面切替"><button type="button" data-tab="week" class="tab active">▦ 予定表</button><button type="button" data-tab="tasks" class="tab">☑ タスク</button><button type="button" data-tab="settings" class="tab">⚙ 設定</button></div>
+ <div class="tabs" role="tablist" aria-label="画面切替"><button type="button" data-tab="week" class="tab active">▦ 予定表</button><button type="button" data-tab="tasks" class="tab">☑ タスク</button><button type="button" data-tab="recovery" class="tab">↻ 予定変更</button><button type="button" data-tab="settings" class="tab">⚙ 設定</button></div>
  <section id="week-view" class="view" aria-label="週間予定表">
    <div class="panel"><div class="week-controls"><div class="week-switch"><button id="prev-week" aria-label="前週" type="button">‹</button><strong id="week-label">今週</strong><button id="next-week" aria-label="翌週" type="button">›</button><button id="today-btn" type="button" class="today">今日</button></div><span class="subtle">予定を選ぶと編集できます。左右にスクロールして曜日を移動</span></div>
     <div class="grid-scroll" id="grid-scroll"><div class="calendar-grid" id="calendar-grid"></div></div>
    </div><div class="legend"><span><i class="dot lecture"></i>授業</span><span><i class="dot work"></i>アルバイト</span><span><i class="dot planned"></i>自動配置</span><span><i class="dot other"></i>その他</span></div>
  </section>
  <section id="tasks-view" class="view hidden"><div class="tasks-tools"><div><h2>課題・やること</h2><p class="subtle">締切・難易度を考慮して並べています</p></div><button class="btn primary" id="add-task-btn" type="button">＋ タスクを追加</button></div><div id="task-list" class="task-list"></div></section>
+ <section id="recovery-view" class="view hidden">
+   <section class="panel settings-card"><h2>体調不良による予定変更</h2><p class="subtle">未完了の予定を休養期間後に移します。授業・面接・勤務は「振替候補」として登録し、実際の予約や締切は変更されません。</p>
+     <div class="setting-buttons"><button class="btn" data-sick="1" type="button">今日だけ</button><button class="btn" data-sick="2" type="button">2日間</button><button class="btn" data-sick="3" type="button">3日間</button></div></section>
+   <h2 class="recovery-title">直近の未完了・変更履歴</h2><div id="recovery-list" class="task-list"></div>
+ </section>
  <section id="settings-view" class="view hidden">
    <div class="settings-grid">
     <section class="panel settings-card"><h2>自動配置</h2><p class="subtle">固定予定を避け、空き時間へ課題を配置します。</p><label>開始時刻 <input id="work-from" type="time" value="08:00"></label><label>終了時刻 <input id="work-to" type="time" value="22:00"></label><label>1回の集中時間<select id="work-chunk"><option value="30">30分</option><option value="60">60分</option><option value="90">90分</option><option value="120">120分</option></select></label><button class="btn primary" id="save-settings" type="button">設定を保存</button></section>
@@ -34,6 +39,7 @@
 <div class="fields-2"><label>分類<select id="event-category"><option>授業</option><option>アルバイト</option><option>課題</option><option>就活</option><option>私用</option></select></label><label>種類<select id="event-kind"><option value="fixed">日時が決まった予定</option><option value="task">課題・タスク</option></select></label></div>
 <div id="fixed-fields"><label>開始 <input id="event-start" type="datetime-local" required></label><label>終了 <input id="event-end" type="datetime-local" required></label><label class="check-line"><input id="event-weekly" type="checkbox">毎週同じ曜日・時刻に繰り返す</label></div>
 <div id="task-fields" class="hidden"><label>締切（任意）<input id="event-deadline" type="datetime-local"></label><div class="fields-2"><label>見積作業時間（分）<input id="event-estimate" type="number" min="15" max="100000" value="60"></label><label>難易度（1〜5）<select id="event-difficulty"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label></div><label>進捗（%）<input id="event-progress" type="number" min="0" max="100" value="0"></label></div>
+<label>関連URL（任意）<input id="event-url" type="url" placeholder="https://..."></label><button id="open-event-url" type="button" class="btn hidden">URLを開く ↗</button>
 <label>メモ（任意）<textarea id="event-note" rows="3" placeholder="教室、持ち物、補足など"></textarea></label>
 <div class="dialog-actions"><button id="delete-event" class="btn danger hidden" type="button">削除</button><div class="spacer"></div><button id="cancel-event" class="btn" type="button">キャンセル</button><button class="btn primary" type="submit">保存する</button></div></form></dialog>
 <dialog id="account-dialog" class="account-dialog"><form id="account-form" method="dialog"><div class="dialog-head"><h2>アカウントと同期</h2><button id="close-account" type="button" class="icon-btn" aria-label="閉じる">×</button></div><p id="account-message" class="subtle">クラウド接続すると複数端末の予定を共有できます。</p>

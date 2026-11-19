@@ -10,7 +10,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test docs/tests/core.test.mjs
+      - run: node --test docs/tests/*.test.mjs
       - run: node --check docs/app.js && node --check docs/core.js && node --check docs/sync.js && node --check docs/firebase-config.js
   android:
     runs-on: ubuntu-latest

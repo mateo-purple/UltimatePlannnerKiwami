@@ -1,4 +1,4 @@
-import {CATEGORIES,DAYS,createEntry,normalize,dayStart,weekStart,addDays,fmtDay,fmtMonth,fmtTime,fmtDate,toLocalInput,fromLocalInput,planWeek,prioritizedTasks,mergeByRevision} from './core.js';
+import {CATEGORIES,DAYS,createEntry,normalize,dayStart,weekStart,addDays,fmtDay,fmtMonth,fmtTime,fmtDate,toLocalInput,fromLocalInput,planWeek,prioritizedTasks,mergeByRevision,missed,historyLabel,retryEntry,deferForIllness,validUrl} from './core.js';
 import {CloudClient} from './sync.js';
 import {firebaseConfig} from './firebase-config.js';
 const $=id=>document.getElementById(id);
@@ -21,12 +21,12 @@ function element(tag,className,text){const el=document.createElement(tag);if(cla
 function updateStatus(label){$('sync-status').textContent=label;}
 function currentEntries(){return entries.filter(e=>!e.deleted);}
 function render(){
-  const titles={week:['週間予定表','空いている時間がひと目で分かる週間ビュー'],tasks:['タスク管理','期限の近い課題から効率よく進めましょう'],settings:['設定','予定の自動配置と端末間同期']};
+  const titles={week:['週間予定表','空いている時間がひと目で分かる週間ビュー'],tasks:['タスク管理','期限の近い課題から効率よく進めましょう'],recovery:['予定変更','未完了の予定と体調不良による振り替え'],settings:['設定','予定の自動配置と端末間同期']};
   $('page-title').textContent=titles[activeTab][0];$('page-subtitle').textContent=titles[activeTab][1];
   for(const tab of document.querySelectorAll('[data-tab]')){tab.classList.toggle('active',tab.dataset.tab===activeTab);tab.setAttribute('aria-selected',String(tab.dataset.tab===activeTab));}
-  for(const view of ['week','tasks','settings'])$(view+'-view').classList.toggle('hidden',view!==activeTab);
-  $('add-btn').classList.toggle('hidden',activeTab==='settings');
-  if(activeTab==='week')renderCalendar();if(activeTab==='tasks')renderTasks();if(activeTab==='settings')renderSettings();
+  for(const view of ['week','tasks','recovery','settings'])$(view+'-view').classList.toggle('hidden',view!==activeTab);
+  $('add-btn').classList.toggle('hidden',activeTab==='settings'||activeTab==='recovery');
+  if(activeTab==='week')renderCalendar();if(activeTab==='tasks')renderTasks();if(activeTab==='recovery')renderRecovery();if(activeTab==='settings')renderSettings();
 }
 function selectTab(value){activeTab=value;render();}
 function saveChange(entry){
@@ -34,6 +34,13 @@ function saveChange(entry){
   const result=normalize({...entry,updatedMs:Math.max(Date.now(),(old?.updatedMs||0)+1)});
   if(old)entries=entries.map(e=>e.syncId===result.syncId?result:e);else entries.push(result);
   saveEntries();render();if(cloud?.user)cloud.push(result).catch(error=>updateStatus('同期保留: '+(error.code||'接続エラー')));
+}
+function saveMany(changes){
+  const now=Date.now(),merged=new Map(entries.map(e=>[e.syncId,e]));
+  const revisions=changes.map(e=>normalize({...e,updatedMs:Math.max(now,(merged.get(e.syncId)?.updatedMs||0)+1)}));
+  for(const e of revisions)merged.set(e.syncId,e);
+  entries=[...merged.values()];saveEntries();render();
+  if(cloud?.user)cloud.pushMany(revisions).catch(error=>updateStatus('同期保留: '+(error.code||'接続エラー')));
 }
 function removeEntry(entry){if(!confirm(`「${entry.title}」を削除しますか？`))return;saveChange({...entry,deleted:true});$('event-dialog').close();toast('予定を削除しました');}
 function localHour(ms){const d=new Date(ms);return d.getHours()+d.getMinutes()/60;}
@@ -85,6 +92,33 @@ function renderTasks(){const list=$('task-list');list.replaceChildren();const ta
     actions.append(edit,element('span','task-meta',task.progress+'%'),done);card.append(actions);list.append(card);
   }
 }
+function renderRecovery(){
+  const list=$('recovery-list');list.replaceChildren();const now=Date.now();
+  const recent=currentEntries().filter(e=>missed(e,now)||(e.history&&e.history.length))
+    .sort((a,b)=>Math.max(b.updatedMs,b.deadlineMs)-Math.max(a.updatedMs,a.deadlineMs)).slice(0,45);
+  if(!recent.length){list.append(element('div','empty','直近21日間の未完了予定や変更履歴はありません。'));return;}
+  for(const e of recent){
+    const card=element('article','task-card');card.append(element('h3','',e.title));
+    const when=e.fixed?`予定 ${fmtDate(e.startMs)} ${fmtTime(e.startMs)}`:`締切 ${e.deadlineMs?fmtDate(e.deadlineMs):'未設定'}`;
+    card.append(element('div','task-meta',when+(e.progress>=100?'　· 完了済み':'　· 未完了')));
+    if(e.history)card.append(element('p','recovery-note','変更履歴: '+historyLabel(e)));
+    const row=element('div','recovery-actions');
+    const retry=element('button','btn primary','もう一度組み込む');retry.type='button';retry.onclick=()=>{
+      if(!confirm(`「${e.title}」を空き時間へ戻しますか？ 元の締切は変わりません。`))return;
+      saveMany([retryEntry(e,currentEntries())]);toast('予定を再計画しました');
+    };row.append(retry);
+    const edit=element('button','btn','編集');edit.type='button';edit.onclick=()=>openEvent(e);row.append(edit);
+    if(e.progress<100){const done=element('button','btn','完了にする');done.type='button';done.onclick=()=>saveChange({...e,progress:100});row.append(done);}
+    if(validUrl(e.url)){const open=element('button','btn','URLを開く ↗');open.type='button';open.onclick=()=>window.open(e.url,'_blank','noopener,noreferrer');row.append(open);}
+    card.append(row);list.append(card);
+  }
+}
+function applySickDay(days){
+  if(!confirm(`今日から${days}日間の未完了予定を後日に移しますか？ 外部の締切・予約は変更されません。`))return;
+  const changes=deferForIllness(currentEntries(),Date.now(),days);
+  if(changes.length)saveMany(changes);
+  toast(`${changes.length}件の予定を再計画しました`);
+}
 function renderSettings(){const p=n=>String(n).padStart(2,'0');$('work-from').value=`${p(settings.fromHour)}:00`;$('work-to').value=`${p(settings.toHour)}:00`;$('work-chunk').value=String(settings.chunk);
 }
 function openEvent(entry=null,kind='fixed',startDay=selectedWeek){
@@ -97,12 +131,14 @@ function openEvent(entry=null,kind='fixed',startDay=selectedWeek){
   $('event-start').value=toLocalInput(value.startMs);$('event-end').value=toLocalInput(value.endMs);$('event-weekly').checked=value.weekly;
   $('event-deadline').value=toLocalInput(value.deadlineMs);$('event-estimate').value=value.estimateMin;
   $('event-difficulty').value=String(value.difficulty);$('event-progress').value=value.progress;$('event-note').value=value.note;
+  $('event-url').value=value.url||'';$('open-event-url').classList.toggle('hidden',!validUrl(value.url));
   $('delete-event').classList.toggle('hidden',!entry);applyKind();$('event-dialog').showModal();$('event-title').focus();
 }
 function applyKind(){const fixed=$('event-kind').value==='fixed';$('fixed-fields').classList.toggle('hidden',!fixed);$('task-fields').classList.toggle('hidden',fixed);$('event-start').required=fixed;$('event-end').required=fixed;}
 function saveEvent(event){event.preventDefault();const title=$('event-title').value.trim();if(!title){$('event-title').reportValidity();return;}
   const existing=editing?entries.find(e=>e.syncId===editing):null;const e=existing?{...existing}:createEntry();
-  e.title=title;e.category=$('event-category').value;e.note=$('event-note').value.trim();e.fixed=$('event-kind').value==='fixed';
+  const link=$('event-url').value.trim();if(link&&!validUrl(link)){toast('http://またはhttps://のURLを入力してください');return;}
+  e.url=link;e.title=title;e.category=$('event-category').value;e.note=$('event-note').value.trim();e.fixed=$('event-kind').value==='fixed';
   if(e.fixed){e.startMs=fromLocalInput($('event-start').value);e.endMs=fromLocalInput($('event-end').value);e.weekly=$('event-weekly').checked;
     if(!e.startMs || e.endMs<=e.startMs){toast('終了日時は開始日時より後にしてください');return;}}
   else{e.weekly=false;e.deadlineMs=fromLocalInput($('event-deadline').value);e.estimateMin=Number($('event-estimate').value)||60;e.difficulty=Number($('event-difficulty').value);e.progress=Number($('event-progress').value)||0;
@@ -138,6 +174,8 @@ function wire(){
   $('add-btn').onclick=()=>openEvent(null,'fixed',Date.now());$('add-task-btn').onclick=()=>openEvent(null,'task',Date.now());
   $('prev-week').onclick=()=>{selectedWeek=addDays(selectedWeek,-7);render();};$('next-week').onclick=()=>{selectedWeek=addDays(selectedWeek,7);render();};$('today-btn').onclick=()=>{selectedWeek=weekStart(Date.now());render();};
   $('event-kind').onchange=applyKind;$('event-form').addEventListener('submit',saveEvent);
+  $('open-event-url').onclick=()=>{const link=$('event-url').value.trim();if(validUrl(link))window.open(link,'_blank','noopener,noreferrer');};
+  document.querySelectorAll('[data-sick]').forEach(b=>b.onclick=()=>applySickDay(Number(b.dataset.sick)));
   $('close-dialog').onclick=()=>{$('event-dialog').close();};$('cancel-event').onclick=()=>{$('event-dialog').close();};
   $('delete-event').onclick=()=>{const e=entries.find(e=>e.syncId===editing);if(e)removeEntry(e);};
   $('account-button').onclick=showAccount;$('close-account').onclick=()=>{$('account-dialog').close();};

@@ -78,6 +78,8 @@ public final class BackupActivity extends Activity {
     private static JSONObject serialized(Entry e)throws Exception{
         JSONObject o=new JSONObject();
         o.put("syncId",e.syncId);o.put("title",e.title);o.put("note",e.note);
+        o.put("url",e.url);o.put("history",e.history);o.put("skippedDays",e.skippedDays);
+        o.put("resumeAfterMs",e.resumeAfterMs);o.put("replanTargetMs",e.replanTargetMs);
         o.put("category",e.category);o.put("source",e.source);o.put("fixed",e.fixed);
         o.put("weekly",e.weekly);o.put("startMs",e.startMs);o.put("endMs",e.endMs);
         o.put("deadlineMs",e.deadlineMs);o.put("estimateMin",e.estimateMin);
@@ -103,6 +105,8 @@ public final class BackupActivity extends Activity {
         Entry e=new Entry();e.syncId=o.optString("syncId","");
         if(e.syncId.isEmpty())e.syncId=UUID.randomUUID().toString();
         e.title=o.optString("title","").trim();e.note=o.optString("note","");
+        e.url=o.optString("url","");e.history=o.optString("history","");e.skippedDays=o.optString("skippedDays","");
+        e.resumeAfterMs=o.optLong("resumeAfterMs",0);e.replanTargetMs=o.optLong("replanTargetMs",0);
         e.category=o.optString("category","課題");e.source=o.optString("source","JSON復元");
         e.fixed=o.optBoolean("fixed",false);e.weekly=o.optBoolean("weekly",false);
         e.startMs=o.optLong("startMs",0);e.endMs=o.optLong("endMs",0);

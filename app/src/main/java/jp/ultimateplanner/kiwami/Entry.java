@@ -7,6 +7,11 @@ public class Entry {
     public boolean deleted = false;
     public String title = "";
     public String note = "";
+    public String url = "";
+    public String history = "";
+    public String skippedDays = "";
+    public long resumeAfterMs = 0;
+    public long replanTargetMs = 0;
     public String category = "課題";
     public String source = "手入力";
     public boolean fixed = false;

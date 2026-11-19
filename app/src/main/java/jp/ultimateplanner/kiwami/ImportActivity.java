@@ -194,10 +194,8 @@ public class ImportActivity extends Activity {
         if(raw==null||raw.trim().isEmpty()) {
             status.setText("文字が見つからなかったため、登録は行いませんでした");return;
         }
-        if(raw.trim().matches("(?s)^https?://\\S+$")) {
-            status.setText("URLだけではログイン先の内容を取得できません。画面を画像として共有してください");
-            return;
-        }
+        // A link by itself is also useful: store it as a task with a browser action.
+        boolean onlyUrl=raw.trim().matches("(?s)^https?://\\S+$");
         List<ImportParser.Suggestion> list=ImportParser.parseMany(raw);
         if(list.isEmpty()) {
             status.setText("予定として読み取れる内容がありませんでした");return;
@@ -206,7 +204,8 @@ public class ImportActivity extends Activity {
         results.removeAllViews();
         for(ImportParser.Suggestion suggestion:list) {
             Entry entry=new Entry();
-            entry.title=suggestion.title;
+            entry.title=onlyUrl?"取り込んだリンク":suggestion.title;
+            entry.url=suggestion.url;
             entry.note=suggestion.note;
             entry.category=suggestion.category;
             entry.source=origin;
@@ -219,6 +218,7 @@ public class ImportActivity extends Activity {
             long existing=db.findEquivalent(entry);
             if(existing>0) {
                 entry=db.get(existing);
+                if(entry!=null && entry.url.isEmpty() && UrlTools.valid(suggestion.url)){entry.url=suggestion.url;db.save(entry);}
                 duplicates++;
             } else {
                 db.save(entry);
@@ -238,6 +238,10 @@ public class ImportActivity extends Activity {
         String when=entry.fixed?TimeUtil.fmt(entry.startMs,"M/d H:mm")+"〜"+TimeUtil.fmt(entry.endMs,"H:mm")
             :entry.deadlineMs>0?"締切 "+TimeUtil.fmt(entry.deadlineMs,"M/d H:mm"):"期限未設定";
         Ui.attach(card,Ui.text(this,entry.category+" · "+when,12,Ui.MUTED),8);
+        if(UrlTools.valid(entry.url)){
+            TextView link=Ui.button(this,"元のURLを開く ↗",false);
+            link.setOnClickListener(v->UrlTools.open(this,entry.url));card.addView(link,Ui.margin(this,-1,-2,0,8,0,2));
+        }
         LinearLayout actions=Ui.horizontal(this);
         TextView edit=Ui.button(this,"編集する",false);
         edit.setOnClickListener(v->startActivity(new Intent(this,EditEventActivity.class).putExtra("id",id)));

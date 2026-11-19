@@ -1,4 +1,4 @@
-const CACHE='ultimate-planner-v8';
+const CACHE='ultimate-planner-v9';
 const ASSETS=['./','./index.html','./style.css','./app.js','./core.js','./sync.js','./firebase-config.js','./manifest.webmanifest','./assets/icon.svg'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});

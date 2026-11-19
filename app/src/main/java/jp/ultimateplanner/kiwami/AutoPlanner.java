@@ -30,7 +30,7 @@ public final class AutoPlanner {
             int startHour=hourOf(e.startMs),startMinute=minuteOf(e.startMs);
             while(cursor.getTimeInMillis()<endDay){
                 long occurrence=TimeUtil.at(cursor.getTimeInMillis(),startHour,startMinute);
-                if(occurrence+duration>startDay && occurrence<endDay)
+                if(occurrence+duration>startDay && occurrence<endDay && !RecoveryPlanner.skipped(e,TimeUtil.day(occurrence)))
                     fixed.add(new Block(e,occurrence,occurrence+duration,false));
                 cursor.add(Calendar.WEEK_OF_YEAR,1);
             }
@@ -43,17 +43,18 @@ public final class AutoPlanner {
         List<Entry> tasks=Priority.tasks(entries,now);
         for(Entry e:tasks){
             int remaining=e.remainingMin();if(remaining<=0)continue;
-            if(e.deadlineMs>0 && e.deadlineMs<=now){result.unscheduled.put(e.id,remaining);continue;}
+            long taskDeadline=e.deadlineMs>now?e.deadlineMs:(e.replanTargetMs>now?e.replanTargetMs:e.deadlineMs);
+            if(taskDeadline>0 && taskDeadline<=now){result.unscheduled.put(e.id,remaining);continue;}
             int limit=Math.max(30,p.chunk());
             for(int d=0;d<horizonDays && remaining>0;d++){
                 long day=TimeUtil.plusDay(startDay,d);
                 long from=TimeUtil.at(day,p.fromHour(),p.fromMinute());
                 long to=TimeUtil.at(day,p.toHour(),p.toMinute());
                 if(to<=from)to=TimeUtil.plusDay(to,1);
-                long slot=Math.max(from,TimeUtil.roundedQuarter(now));
+                long slot=Math.max(Math.max(from,TimeUtil.roundedQuarter(now)),TimeUtil.roundedQuarter(e.resumeAfterMs));
                 // Single-day plans are deliberately bounded to the end of the chosen day.
                 while(slot+15*60000L<=to && remaining>0){
-                    long deadline=e.deadlineMs>0?e.deadlineMs:Long.MAX_VALUE;
+                    long deadline=taskDeadline>0?taskDeadline:Long.MAX_VALUE;
                     if(slot>=deadline)break;
                     long nearest=Math.min(to,deadline);
                     for(Block b:result.blocks)if(b.end>slot && b.start<nearest)nearest=Math.min(nearest,b.start);
